@@ -1,0 +1,96 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 font-sans antialiased;
+  }
+
+  h1, h2, h3 {
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  .dashboard-card {
+    @apply rounded-xl border border-surface-border bg-white p-5 shadow-sm;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 
+           text-sm font-semibold text-white transition hover:bg-blue-700 active:scale-[0.98];
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-lg border border-surface-border 
+           bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50;
+  }
+
+  .stat-label {
+    @apply text-sm font-medium text-slate-500;
+  }
+
+  .stat-value {
+    @apply mt-1 text-2xl font-bold text-slate-900;
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold;
+  }
+  
+  .badge-success { @apply badge bg-emerald-100 text-emerald-700; }
+  .badge-error   { @apply badge bg-rose-100 text-rose-700; }
+  .badge-info    { @apply badge bg-blue-100 text-blue-700; }
+  .badge-warning { @apply badge bg-amber-100 text-amber-700; }
+
+  .table-header {
+    @apply bg-slate-50 px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500;
+  }
+
+  .table-cell {
+    @apply border-t border-surface-border px-4 py-3 text-sm text-slate-700;
+  }
+}
+
+/* Custom Scrollbar for Light Mode */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-slate-100;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 rounded-full hover:bg-slate-400;
+}
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body, html, #root {
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .flex {
+    display: block !important;
+  }
+}
