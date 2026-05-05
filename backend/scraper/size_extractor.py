@@ -1,0 +1,109 @@
+import re
+import requests
+from bs4 import BeautifulSoup
+import logging
+import random
+import time
+
+logger = logging.getLogger(__name__)
+
+_session = requests.Session()
+
+def extract_size_quantities(url: str) -> dict[str, dict]:
+    """
+    Extracts size-level stock info from a Shopify PDP with retry logic and 429 handling.
+    """
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.wforwoman.com/",
+    }
+
+    max_retries = 3
+    resp_text = None
+    
+    for attempt in range(max_retries):
+        try:
+            resp = _session.get(url, headers=headers, timeout=15)
+            
+            if resp.status_code == 429:
+                wait_time = (2 ** attempt) + random.uniform(3, 7)
+                logger.warning(f"[size_extractor] 429 Rate Limit hit on attempt {attempt+1}. Retrying in {wait_time:.1f}s...")
+                time.sleep(wait_time)
+                continue
+                
+            resp.raise_for_status()
+            resp_text = resp.text
+            break # Success
+            
+        except Exception as e:
+            if attempt == max_retries - 1:
+                logger.warning(f"[size_extractor] Final attempt failed for {url}: {e}")
+                return {}
+            time.sleep(2)
+
+    if not resp_text:
+        return {}
+
+    try:
+        soup = BeautifulSoup(resp_text, "html.parser")
+        results = {}
+
+        for radio in soup.select('input[type="radio"][name="Size"]'):
+            size = radio.get("value")
+            if not size:
+                continue
+
+            size_key = size.strip().upper()
+            label = soup.find("label", {"for": radio.get("id")})
+
+            # ── Default state ──────────────────────────────────────────────
+            qty = 0
+            disclosed = False
+            is_available = False 
+
+            radio_disabled = radio.has_attr("disabled")
+
+            if radio_disabled:
+                is_available = False
+            elif label:
+                label_classes = label.get("class", [])
+                is_sold_out_class = "sold_out_product_notify" in label_classes
+
+                if is_sold_out_class:
+                    is_available = False
+                else:
+                    span = label.find("span", class_="data_variant__quantity")
+                    if not span:
+                        span = label.find("span", class_="data_variant__qunatity")
+
+                    if span:
+                        span_text = span.get_text(strip=True)
+                        match = re.search(r"(\d+)", span_text)
+                        if match:
+                            qty = int(match.group(1))
+                            disclosed = True
+                            is_available = qty > 0
+                        else:
+                            is_available = True
+                    else:
+                        is_available = True
+            else:
+                is_available = not radio_disabled
+
+            results[size_key] = {
+                "quantity": qty,
+                "disclosed": disclosed,
+                "is_available": is_available,
+            }
+
+        return results
+
+    except Exception as e:
+        logger.warning(f"[size_extractor] Parsing error for {url}: {e}")
+        return {}
