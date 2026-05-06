@@ -7,33 +7,34 @@ import time
 
 logger = logging.getLogger(__name__)
 
+from fake_useragent import UserAgent
+
+ua = UserAgent()
 _session = requests.Session()
 
 def extract_size_quantities(url: str) -> dict[str, dict]:
     """
-    Extracts size-level stock info from a Shopify PDP with retry logic and 429 handling.
+    Extracts size-level stock info from a Shopify PDP with retry logic and 429/503 handling.
     """
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0.0.0 Safari/537.36"
-        ),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.wforwoman.com/",
-    }
-
     max_retries = 3
     resp_text = None
     
     for attempt in range(max_retries):
+        headers = {
+            "User-Agent": ua.random,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://www.wforwoman.com/",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache"
+        }
         try:
-            resp = _session.get(url, headers=headers, timeout=15)
+            resp = _session.get(url, headers=headers, timeout=20)
             
-            if resp.status_code == 429:
-                wait_time = (2 ** attempt) + random.uniform(3, 7)
-                logger.warning(f"[size_extractor] 429 Rate Limit hit on attempt {attempt+1}. Retrying in {wait_time:.1f}s...")
+            # Handle Rate Limiting (429) or Server Overload (503/504)
+            if resp.status_code in [429, 503, 504]:
+                wait_time = (attempt + 1) * random.uniform(5, 10)
+                logger.warning(f"[size_extractor] Status {resp.status_code} on attempt {attempt+1}. Backing off for {wait_time:.1f}s...")
                 time.sleep(wait_time)
                 continue
                 
@@ -45,7 +46,7 @@ def extract_size_quantities(url: str) -> dict[str, dict]:
             if attempt == max_retries - 1:
                 logger.warning(f"[size_extractor] Final attempt failed for {url}: {e}")
                 return {}
-            time.sleep(2)
+            time.sleep(random.uniform(2, 5))
 
     if not resp_text:
         return {}

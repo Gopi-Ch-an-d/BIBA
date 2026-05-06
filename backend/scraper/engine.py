@@ -323,6 +323,7 @@ class BaseScraper:
         raise NotImplementedError
 
     def scrape_all_categories(self) -> list[RawProduct]:
+        self.was_interrupted = False
         products = []
         for cat in self.CATEGORY_URLS:
             # Handle both string URLs and dict objects from DB
@@ -336,6 +337,10 @@ class BaseScraper:
                 products.extend(self._handle_pagination(url, cat_name))
             except Exception as e:
                 logger.error(f"[{self.COMPETITOR_NAME}] Failed on {url}: {e}")
+                # If it's a browser crash/session error, mark as interrupted
+                if "session id" in str(e).lower() or "connection" in str(e).lower():
+                    self.was_interrupted = True
+                    break
         return products
 
 
@@ -351,11 +356,22 @@ class WScraper(BaseScraper):
         import re
         try:
             # ── Product URL & SKU ──────────────────────────────────────────────
-            url_el = card.find_element(By.CSS_SELECTOR, "a.full-unstyled-link")
-            product_url = url_el.get_attribute("href")
+            url_el = None
+            selectors = ["a.full-unstyled-link", "a.card-information__text", "a.card__media", ".card-information a"]
             
-            # --- FILTER: Only accept actual product links ---
-            if "/products/" not in product_url:
+            for sel in selectors:
+                try:
+                    temp_el = card.find_element(By.CSS_SELECTOR, sel)
+                    href = temp_el.get_attribute("href")
+                    if href and "/products/" in href:
+                        url_el = temp_el
+                        product_url = href
+                        break
+                except:
+                    continue
+
+            if not url_el:
+                # If we can't find a product link, this is likely not a product card (e.g. layout spacer)
                 return None
 
             sku = product_url.split("/products/")[-1].split("?")[0]
@@ -450,7 +466,7 @@ class WScraper(BaseScraper):
                     # Use the client's logic to fetch exact quantities from PDP
                     # This provides the "X left" numbers for every size
                     # Small delay to avoid 429 rate limiting on PDP pages
-                    time.sleep(random.uniform(1.0, 3.0))
+                    time.sleep(random.uniform(2.0, 5.0))
                     sizes = extract_size_quantities(product_url)
                 except Exception as e:
                     logger.debug(f"[W] PDP size fetch error for {sku}: {e}")
@@ -589,6 +605,9 @@ class WScraper(BaseScraper):
 
             except Exception as e:
                 logger.info(f"[W] Pagination end: {e}")
+                # Re-raise critical browser errors so the pipeline safety switch triggers
+                if "session id" in str(e).lower() or "connection" in str(e).lower():
+                    raise e
                 break
 
         logger.info(f"[W] Finished scrape. Total products: {len(products)}")
@@ -686,8 +705,10 @@ class AureliaScraper(BaseScraper):
                 show_more.click()
                 human_delay(3, 5) # Wait for new items to load
                 page_attempt += 1
-            except Exception:
-                logger.info("[Aurelia] No more 'Show More' button found.")
+            except Exception as e:
+                logger.info(f"[Aurelia] Pagination end: {e}")
+                if "session id" in str(e).lower() or "connection" in str(e).lower():
+                    raise e
                 break
 
         # Final grab of all cards - Verified .card-wrapper from CSS
@@ -792,7 +813,10 @@ class GlobalDesiScraper(BaseScraper):
                     break
                 self._load_page(next_url)
                 page += 1
-            except Exception:
+            except Exception as e:
+                logger.info(f"[GlobalDesi] Pagination end: {e}")
+                if "session id" in str(e).lower() or "connection" in str(e).lower():
+                    raise e
                 break
         return products
 

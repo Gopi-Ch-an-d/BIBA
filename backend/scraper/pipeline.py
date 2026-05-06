@@ -283,10 +283,11 @@ def run_scrape_for_competitor(competitor_name: str, db_session: Session) -> dict
 
                     processed_skus.add(raw.sku)
 
-                # ── Batch commit every 50 products ─────────────────────────────
+                # ── Commit immediately after each product ──────────────────────
                 processed_count += 1
-                if processed_count % 50 == 0:
-                    db_session.commit()
+                db_session.commit()
+
+                if processed_count % 10 == 0:
                     logger.info(
                         f"[{competitor_name}] Progress: {processed_count} products processed "
                         f"({new_count} new, {updated_count} updated)..."
@@ -300,11 +301,17 @@ def run_scrape_for_competitor(competitor_name: str, db_session: Session) -> dict
                 # Savepoint already rolled back — safe to continue
 
         # ── Run scraper ────────────────────────────────────────────────────────
+        was_interrupted = False
         with get_stealth_driver(use_proxy=True) as driver:
             scraper = scraper_cls(driver, category_urls=cat_urls, callback=on_product)
             raw_products = scraper.scrape_all_categories()
+            was_interrupted = getattr(scraper, "was_interrupted", False)
 
         # ── Cleanup: Soft-delete products no longer seen on site ───────────────
+        if was_interrupted:
+            logger.warning(f"[{competitor_name}] Scrape was interrupted. Skipping soft-delete cleanup to protect data.")
+            return
+
         logger.info(f"[{competitor_name}] Starting soft-delete cleanup for delisted products...")
 
         to_deactivate_bs = db_session.execute(
