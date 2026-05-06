@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, Variants } from "framer-motion";
 import { useQuery, useQueries } from "@tanstack/react-query";
@@ -6,6 +6,8 @@ import { format, parseISO } from "date-fns";
 import {
   AreaChart,
   Area,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -36,7 +38,12 @@ import {
   productService,
   analyticsService,
 } from "../services/api";
-import { Competitor, CompetitorOverviewCard, Product } from "../types";
+import {
+  Competitor,
+  CompetitorOverviewCard,
+  Product,
+  NewArrivalTrendPoint,
+} from "../types";
 
 const COLORS = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b"];
 
@@ -109,7 +116,6 @@ const StatCard: React.FC<StatCardProps> = ({
           <Icon size={20} />
         </div>
       </div>
-      {/* Trend indicator removed as requested */}
     </div>
   );
 };
@@ -333,10 +339,24 @@ const Overview: React.FC = () => {
   const navigate = useNavigate();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
+  // ── Live Clock ──
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
   const { data: overview = [] } = useQuery<CompetitorOverviewCard[]>({
     queryKey: ["overview"],
     queryFn: competitorService.getOverview,
-    refetchInterval: 2000,
+    refetchInterval: 60000,
+  });
+
+  // ── New Arrivals Trend ──
+  const { data: newArrivalsTrend = [] } = useQuery<NewArrivalTrendPoint[]>({
+    queryKey: ["newArrivalsTrend"],
+    queryFn: () => analyticsService.getNewArrivalsTrend({ days: 14 }),
+    refetchInterval: 60000,
   });
 
   const { data: competitors = [] } = useQuery<Competitor[]>({
@@ -404,6 +424,25 @@ const Overview: React.FC = () => {
     );
   }, [trendQueries, competitors]);
 
+  const groupedNewArrivalsData = useMemo(() => {
+    const dataMap: Record<string, any> = {};
+    const competitorNames = new Set<string>();
+
+    newArrivalsTrend.forEach((p) => {
+      const d = p.date;
+      if (!dataMap[d]) dataMap[d] = { date: d };
+      dataMap[d][p.competitor_name] = p.count;
+      competitorNames.add(p.competitor_name);
+    });
+
+    return {
+      data: Object.values(dataMap).sort((a: any, b: any) =>
+        a.date.localeCompare(b.date),
+      ),
+      names: Array.from(competitorNames),
+    };
+  }, [newArrivalsTrend]);
+
   const distribution = overview.map((c) => ({
     name: c.competitor_name,
     value: c.bestsellers_count,
@@ -454,6 +493,11 @@ const Overview: React.FC = () => {
 
   return (
     <>
+      {/* Playfair Display for BIBA wordmark */}
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap"
+      />
       {selectedProduct && (
         <ProductModal
           product={selectedProduct}
@@ -474,37 +518,34 @@ const Overview: React.FC = () => {
           className="flex items-center justify-between py-2"
         >
           <div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-              Intelligence Dashboard
+            <h1 className="text-xl font-bold tracking-tight">
+              <span
+                style={{
+                  color: "#c0392b",
+                  fontFamily: "'Playfair Display', serif",
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                }}
+              >
+                BIBA
+              </span>
+              <span
+                style={{
+                  color: "#0f172a",
+                  fontFamily: "'Playfair Display', serif",
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  marginLeft: "10px",
+                }}
+              >
+                Dashboard
+              </span>
             </h1>
             <p className="text-[11px] text-slate-400 mt-0.5 uppercase tracking-widest">
               Automated Market Analytics
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              disabled={isTriggering}
-              onClick={handleTriggerScrape}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-[11px] font-black uppercase tracking-widest rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 active:scale-95 disabled:opacity-50"
-            >
-              {isTriggering ? (
-                <Sparkles size={14} className="animate-spin" />
-              ) : (
-                <RefreshCw size={14} />
-              )}
-              Launch Scraper
-            </button>
-            <button
-              type="button"
-              disabled={isStopping}
-              onClick={handleStopScrape}
-              className="flex items-center gap-2 px-4 py-2.5 bg-rose-50 text-rose-600 text-[11px] font-black uppercase tracking-widest rounded-xl hover:bg-rose-100 transition-all active:scale-95 disabled:opacity-50"
-            >
-              <XCircle size={14} className={isStopping ? "animate-spin" : ""} />
-              Stop Scraper
-            </button>
-          </div>
+
         </motion.div>
 
         {/* ── Stat Cards ── */}
@@ -542,6 +583,94 @@ const Overview: React.FC = () => {
             colorClass="bg-blue-50 text-blue-600"
             onClick={() => navigate("/new-arrivals")}
           />
+        </motion.div>
+
+        {/* ── New Arrivals Count Trend ── */}
+        <motion.div variants={itemVariants}>
+          <div className="bg-white border border-slate-100 rounded-xl p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 mb-5">
+              New Arrivals Detection
+            </p>
+            <div className="h-56 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={groupedNewArrivalsData.data}
+                  margin={{ top: 5, right: 10, left: -10, bottom: 0 }}
+                  barCategoryGap="5%"
+                  barGap={1}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    vertical={false}
+                    stroke="#f1f5f9"
+                  />
+                  <XAxis
+                    dataKey="date"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 10, fill: "#94a3b8" }}
+                    tickFormatter={(val) => format(parseISO(val), "MMM dd")}
+                    interval={0}
+                    padding={{ left: 30, right: 30 }}
+                  />
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 10, fill: "#94a3b8" }}
+                    width={40}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#fff",
+                      border: "none",
+                      borderRadius: "12px",
+                      boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
+                      fontSize: "12px",
+                      fontWeight: "bold",
+                    }}
+                    labelFormatter={(val) =>
+                      format(parseISO(val), "MMMM dd, yyyy")
+                    }
+                    cursor={false}
+                  />
+                  <Legend
+                    verticalAlign="top"
+                    align="right"
+                    iconType="circle"
+                    wrapperStyle={{
+                      fontSize: "10px",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      paddingBottom: "10px",
+                    }}
+                  />
+                  {groupedNewArrivalsData.names.map((name) => (
+                    <Bar
+                      key={name}
+                      dataKey={name}
+                      name={name}
+                      radius={[4, 4, 0, 0]}
+                      barSize={32}
+                    >
+                      {groupedNewArrivalsData.data.map((entry, idx) => {
+                        const val = entry[name] || 0;
+                        let barColor = "#3b82f6";
+                        if (val > 500) barColor = "#c0392b";
+                        else if (val >= 100) barColor = "#10b981";
+                        return (
+                          <Cell
+                            key={`cell-${idx}`}
+                            fill={barColor}
+                            fillOpacity={0.8}
+                          />
+                        );
+                      })}
+                    </Bar>
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
         </motion.div>
 
         {/* ── Charts Row ── */}
@@ -720,7 +849,6 @@ const Overview: React.FC = () => {
                 <col style={{ width: "auto" }} />
                 <col style={{ width: "130px" }} />
                 <col style={{ width: "110px" }} />
-                <col style={{ width: "100px" }} />
                 <col style={{ width: "90px" }} />
                 <col style={{ width: "48px" }} />
               </colgroup>
@@ -731,7 +859,6 @@ const Overview: React.FC = () => {
                     "Product",
                     "Competitor",
                     "Price",
-                    "Stock",
                     "Updated",
                     "",
                   ].map((h) => (
@@ -788,25 +915,6 @@ const Overview: React.FC = () => {
                           -{Math.round(p.discount_pct)}% off
                         </p>
                       )}
-                    </td>
-
-                    {/* Stock */}
-                    <td className="px-4 py-3">
-                      <span
-                        className={clsx(
-                          "inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap",
-                          p.stock_available
-                            ? "text-emerald-600 bg-emerald-50"
-                            : "text-rose-500 bg-rose-50",
-                        )}
-                      >
-                        <div
-                          className={`h-1.5 w-1.5 rounded-full shrink-0 ${p.stock_available ? "bg-emerald-500" : "bg-rose-500"}`}
-                        />
-                        {p.stock_available ? (
-                          p.is_quantity_disclose === false ? "N/A" : `${p.total_quantity ?? 0} units`
-                        ) : "Out"}
-                      </span>
                     </td>
 
                     {/* Updated */}

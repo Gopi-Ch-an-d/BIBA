@@ -49,7 +49,6 @@ const CompetitorView: React.FC = () => {
     queryFn: competitorService.getCompetitors
   });
 
-  // Filter competitors by name or base_url based on search query
   const filteredCompetitors = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return competitors;
@@ -256,7 +255,7 @@ const CompetitorView: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search by name or website..."
-                className="pl-10 pr-10 py-2.5 w-72 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all shadow-sm"
+                className="pl-10 pr-10 py-2.5 w-72 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-red-300 focus:ring-2 focus:ring-red-100 transition-all shadow-sm"
               />
               {searchQuery && (
                 <button
@@ -268,9 +267,13 @@ const CompetitorView: React.FC = () => {
               )}
             </div>
 
+            {/* Register Competitor button */}
             <button 
               onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
+              className="flex items-center gap-2 px-5 py-2.5 text-white rounded-xl font-bold text-sm transition-all shadow-lg"
+              style={{ backgroundColor: '#c0392b', boxShadow: '0 4px 14px rgba(192,57,43,0.35)' }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#a93226')}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#c0392b')}
             >
               <Plus size={18} strokeWidth={3} />
               Register Competitor
@@ -334,7 +337,7 @@ const CompetitorView: React.FC = () => {
                         setFormData({...formData, name: e.target.value});
                         if (errors.name) setErrors({...errors, name: ''});
                       }}
-                      className={`w-full px-5 py-4 bg-slate-50 border-2 rounded-2xl text-slate-800 font-bold placeholder:text-slate-300 focus:ring-0 transition-all text-lg ${errors.name ? 'border-rose-200 bg-rose-50/30' : 'border-transparent focus:border-blue-500'}`}
+                      className={`w-full px-5 py-4 bg-slate-50 border-2 rounded-2xl text-slate-800 font-bold placeholder:text-slate-300 focus:ring-0 transition-all text-lg ${errors.name ? 'border-rose-200 bg-rose-50/30' : 'border-transparent focus:border-red-400'}`}
                       placeholder="e.g. FabIndia"
                     />
                     {errors.name && <p className="text-[10px] text-rose-500 font-bold flex items-center gap-1 mt-1 ml-1"><AlertCircle size={10} /> {errors.name}</p>}
@@ -348,7 +351,7 @@ const CompetitorView: React.FC = () => {
                         setFormData({...formData, code: e.target.value.toUpperCase()});
                         if (errors.code) setErrors({...errors, code: ''});
                       }}
-                      className={`w-full px-5 py-4 bg-slate-50 border-2 rounded-2xl text-slate-800 font-bold placeholder:text-slate-300 focus:ring-0 transition-all uppercase ${errors.code ? 'border-rose-200 bg-rose-50/30' : 'border-transparent focus:border-blue-500'}`}
+                      className={`w-full px-5 py-4 bg-slate-50 border-2 rounded-2xl text-slate-800 font-bold placeholder:text-slate-300 focus:ring-0 transition-all uppercase ${errors.code ? 'border-rose-200 bg-rose-50/30' : 'border-transparent focus:border-red-400'}`}
                       placeholder="FAB_IND"
                     />
                     {errors.code && <p className="text-[10px] text-rose-500 font-bold flex items-center gap-1 mt-1 ml-1"><AlertCircle size={10} /> {errors.code}</p>}
@@ -366,7 +369,7 @@ const CompetitorView: React.FC = () => {
                         setFormData({...formData, base_url: e.target.value});
                         if (errors.base_url) setErrors({...errors, base_url: ''});
                       }}
-                      className={`w-full pl-14 pr-5 py-4 bg-slate-50 border-2 rounded-2xl text-slate-800 font-bold placeholder:text-slate-300 focus:ring-0 transition-all ${errors.base_url ? 'border-rose-200 bg-rose-50/30' : 'border-transparent focus:border-blue-500'}`}
+                      className={`w-full pl-14 pr-5 py-4 bg-slate-50 border-2 rounded-2xl text-slate-800 font-bold placeholder:text-slate-300 focus:ring-0 transition-all ${errors.base_url ? 'border-rose-200 bg-rose-50/30' : 'border-transparent focus:border-red-400'}`}
                       placeholder="https://www.fabindia.com"
                     />
                   </div>
@@ -376,10 +379,14 @@ const CompetitorView: React.FC = () => {
                 <div className="pt-4 border-t border-slate-100">
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Tracking Categories</h3>
+                    {/* Add Category text button */}
                     <button 
                       type="button"
                       onClick={addCategory}
-                      className="text-blue-600 hover:text-blue-700 text-xs font-black flex items-center gap-1 uppercase"
+                      className="text-xs font-black flex items-center gap-1 uppercase transition-colors"
+                      style={{ color: '#c0392b' }}
+                      onMouseEnter={e => (e.currentTarget.style.color = '#a93226')}
+                      onMouseLeave={e => (e.currentTarget.style.color = '#c0392b')}
                     >
                       <Plus size={14} /> Add Category
                     </button>
@@ -394,7 +401,7 @@ const CompetitorView: React.FC = () => {
                             type="text"
                             value={cat.name}
                             onChange={(e) => updateCategory(index, 'name', e.target.value)}
-                            className={`w-full px-4 py-2 bg-white border rounded-xl text-slate-800 font-bold text-sm focus:ring-2 focus:ring-blue-500 ${errors[`cat_name_${index}`] ? 'border-rose-300' : 'border-slate-200'}`}
+                            className={`w-full px-4 py-2 bg-white border rounded-xl text-slate-800 font-bold text-sm focus:ring-2 focus:ring-red-200 focus:border-red-400 ${errors[`cat_name_${index}`] ? 'border-rose-300' : 'border-slate-200'}`}
                             placeholder="e.g. Bestsellers"
                           />
                         </div>
@@ -404,7 +411,7 @@ const CompetitorView: React.FC = () => {
                             type="url"
                             value={cat.url}
                             onChange={(e) => updateCategory(index, 'url', e.target.value)}
-                            className={`w-full px-4 py-2 bg-white border rounded-xl text-slate-800 font-bold text-sm focus:ring-2 focus:ring-blue-500 ${errors[`cat_url_${index}`] ? 'border-rose-300' : 'border-slate-200'}`}
+                            className={`w-full px-4 py-2 bg-white border rounded-xl text-slate-800 font-bold text-sm focus:ring-2 focus:ring-red-200 focus:border-red-400 ${errors[`cat_url_${index}`] ? 'border-rose-300' : 'border-slate-200'}`}
                             placeholder="https://brand.com/collections/..."
                           />
                         </div>
@@ -429,6 +436,7 @@ const CompetitorView: React.FC = () => {
               </div>
 
               <div className="p-8 bg-slate-50 flex gap-4 border-t border-slate-100">
+                {/* Cancel button */}
                 <button
                   type="button"
                   onClick={() => { setIsModalOpen(false); resetForm(); }}
@@ -436,11 +444,16 @@ const CompetitorView: React.FC = () => {
                 >
                   Cancel
                 </button>
+
+                {/* Register Brand button */}
                 <button
                   type="button"
                   onClick={handleSubmit}
                   disabled={createMutation.isPending}
-                  className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-xl font-black text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="flex-1 px-6 py-3 text-white rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  style={{ backgroundColor: '#c0392b', boxShadow: '0 4px 14px rgba(192,57,43,0.35)' }}
+                  onMouseEnter={e => { if (!createMutation.isPending) e.currentTarget.style.backgroundColor = '#a93226'; }}
+                  onMouseLeave={e => { if (!createMutation.isPending) e.currentTarget.style.backgroundColor = '#c0392b'; }}
                 >
                   {createMutation.isPending ? (
                     <>

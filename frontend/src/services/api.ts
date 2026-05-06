@@ -5,6 +5,7 @@ import {
   ProductListResponse,
   PriceHistoryPoint,
   PriceHistoryRecord,
+  NewArrivalTrendPoint,
   ScrapeLog
 } from '../types';
 
@@ -84,6 +85,10 @@ export const analyticsService = {
   }) => api.get<PriceHistoryPoint[]>('/analytics/price-trend', { params }).then(res => res.data),
   getProductHistory: (sku: string) => api.get<PriceHistoryRecord[]>(`/analytics/product/${sku}/history`).then(res => res.data),
   getProductSizeHistory: (source: string, id: number) => api.get<any[]>(`/analytics/product/${source}/${id}/size-history`).then(res => res.data),
+  getNewArrivalsTrend: (params: {
+    competitor_id?: number;
+    days?: number;
+  }) => api.get<NewArrivalTrendPoint[]>('/analytics/new-arrivals-trend', { params }).then(res => res.data),
 };
 
 export const logService = {

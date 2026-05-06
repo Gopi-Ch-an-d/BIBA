@@ -101,6 +101,15 @@ class PriceHistoryPoint(BaseModel):
         from_attributes = True
 
 
+class NewArrivalTrendPoint(BaseModel):
+    date: date
+    count: int
+    competitor_name: str
+
+    class Config:
+        from_attributes = True
+
+
 # ── Dashboard Overview ─────────────────────────────────────────────────────────
 
 class CompetitorOverviewCard(BaseModel):

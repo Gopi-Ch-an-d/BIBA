@@ -1,4 +1,10 @@
-import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import React, {
+  useState,
+  useMemo,
+  useRef,
+  useCallback,
+  useEffect,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
 import { format, parseISO } from "date-fns";
@@ -37,7 +43,7 @@ const CHART_COLORS = [
 function renderQty(
   isAvailable: boolean,
   isDisclosed: boolean,
-  qty: number
+  qty: number,
 ): string {
   if (!isAvailable) return "—";
   if (!isDisclosed) return "N/A";
@@ -63,7 +69,7 @@ const StockTrendTooltip = ({
 }) => {
   if (!active || !payload || !payload.length) return null;
   const entries = payload.filter(
-    (p) => p.value !== undefined && p.value !== null
+    (p) => p.value !== undefined && p.value !== null,
   );
 
   return (
@@ -163,7 +169,7 @@ const StockTrendTooltip = ({
             return sum;
           }, 0);
           const hasAnyDisclosed = sizes.some(
-            (s) => grouped[label as string]?.[s]?.is_quantity_disclose
+            (s) => grouped[label as string]?.[s]?.is_quantity_disclose,
           );
           if (!hasAnyDisclosed) return null;
           return (
@@ -187,9 +193,7 @@ const StockTrendTooltip = ({
               >
                 Total (disclosed)
               </span>
-              <span
-                style={{ fontSize: 11, fontWeight: 800, color: "#111827" }}
-              >
+              <span style={{ fontSize: 11, fontWeight: 800, color: "#111827" }}>
                 {disclosedTotal} units
               </span>
             </div>
@@ -213,12 +217,11 @@ interface StockDotPlotProps {
   colors: string[];
 }
 
-// ── FIXED: Tooltip now shows only sizes sharing the hovered quantity ──────────
 interface DotTooltipState {
   x: number;
   y: number;
   date: string;
-  size: string; // ← which size dot was hovered
+  size: string;
 }
 
 const TOOLTIP_WIDTH = 180;
@@ -231,9 +234,9 @@ const StockDotPlot: React.FC<StockDotPlotProps> = ({
 }) => {
   const [tooltip, setTooltip] = useState<DotTooltipState | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
-  // ── Measure container width responsively ──────────────────────────────────
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -245,7 +248,6 @@ const StockDotPlot: React.FC<StockDotPlotProps> = ({
     return () => ro.disconnect();
   }, []);
 
-  // Layout
   const Y_LEVELS = [1, 2, 3, 4, 5];
   const Y_MIN = 1;
   const Y_MAX = 5;
@@ -256,29 +258,28 @@ const StockDotPlot: React.FC<StockDotPlotProps> = ({
   const ROW_HEIGHT = 40;
   const CHART_HEIGHT = (Y_MAX - Y_MIN) * ROW_HEIGHT + TOP_PAD + BOTTOM_PAD;
 
-  // ── Key fix: derive DATE_COL_WIDTH from actual container width ────────────
+  // Always render SVG at exact measured pixel width — no viewBox scaling
   const availableWidth = containerWidth > 0 ? containerWidth : 400;
   const DATE_COL_WIDTH =
     dates.length > 0
       ? Math.floor((availableWidth - LABEL_WIDTH - RIGHT_PAD) / dates.length)
       : 56;
-  const CHART_WIDTH = availableWidth;
 
   const qtyToY = useCallback(
     (qty: number) => TOP_PAD + (Y_MAX - qty) * ROW_HEIGHT,
-    []
+    [],
   );
 
   const dateToX = useCallback(
     (idx: number) => LABEL_WIDTH + idx * DATE_COL_WIDTH + DATE_COL_WIDTH / 2,
-    [DATE_COL_WIDTH, LABEL_WIDTH]
+    [DATE_COL_WIDTH, LABEL_WIDTH],
   );
 
-  // ── FIXED: pass size along with date so tooltip can filter by quantity ──────
+  // Mouse coords relative to container div (no viewBox transform needed)
   const handleMouseEnter = (
     e: React.MouseEvent<SVGCircleElement | SVGLineElement>,
     date: string,
-    size: string
+    size: string,
   ) => {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -292,15 +293,26 @@ const StockDotPlot: React.FC<StockDotPlotProps> = ({
 
   const handleMouseLeave = () => setTooltip(null);
 
-  // ── Boundary-aware tooltip position ──────────────────────────────────────
+  // ── FIXED: getTooltipStyle now checks for both right AND bottom overflow ──
   const getTooltipStyle = (): React.CSSProperties => {
     if (!tooltip) return {};
-    const containerWidth = containerRef.current?.offsetWidth ?? 0;
-    const wouldOverflowRight = tooltip.x + 14 + TOOLTIP_WIDTH > containerWidth;
+    const cw = containerRef.current?.offsetWidth ?? 0;
+    const ch = containerRef.current?.offsetHeight ?? 0;
+
+    const wouldOverflowRight = tooltip.x + 14 + TOOLTIP_WIDTH > cw;
+
+    // Estimate tooltip height: date header (~36px) + per-size row (~26px) + padding (~20px)
+    const estimatedTooltipHeight = 36 + sizes.length * 26 + 20;
+    const wouldOverflowBottom = tooltip.y - 14 + estimatedTooltipHeight > ch;
+
     return {
       position: "absolute",
-      left: wouldOverflowRight ? tooltip.x - TOOLTIP_WIDTH - 10 : tooltip.x + 14,
-      top: Math.max(0, tooltip.y - 14),
+      left: wouldOverflowRight
+        ? tooltip.x - TOOLTIP_WIDTH - 10
+        : tooltip.x + 14,
+      top: wouldOverflowBottom
+        ? Math.max(0, tooltip.y - estimatedTooltipHeight)
+        : Math.max(0, tooltip.y - 14),
       background: "#fff",
       borderRadius: 12,
       boxShadow:
@@ -313,15 +325,24 @@ const StockDotPlot: React.FC<StockDotPlotProps> = ({
     };
   };
 
+  // Defer render until real width is measured to avoid wrong layout on first paint
+  if (containerWidth === 0) {
+    return (
+      <div ref={containerRef} style={{ width: "100%", height: CHART_HEIGHT }} />
+    );
+  }
+
   return (
     <div
       ref={containerRef}
-      style={{ position: "relative", width: "100%", overflowX: "auto" }}
+      style={{ position: "relative", width: "100%", overflow: "hidden" }}
     >
+      {/* SVG at exact pixel width — no viewBox, no coordinate mismatch */}
       <svg
-        width={CHART_WIDTH}
+        ref={svgRef}
+        width={availableWidth}
         height={CHART_HEIGHT}
-        style={{ display: "block", overflow: "visible" }}
+        style={{ display: "block" }}
       >
         {/* Horizontal grid lines + Y-axis labels */}
         {Y_LEVELS.map((lvl) => {
@@ -330,7 +351,7 @@ const StockDotPlot: React.FC<StockDotPlotProps> = ({
             <g key={lvl}>
               <line
                 x1={LABEL_WIDTH}
-                x2={CHART_WIDTH - RIGHT_PAD}
+                x2={availableWidth - RIGHT_PAD}
                 y1={y}
                 y2={y}
                 stroke="#f0f0f0"
@@ -369,7 +390,7 @@ const StockDotPlot: React.FC<StockDotPlotProps> = ({
         {/* X-axis base line */}
         <line
           x1={LABEL_WIDTH}
-          x2={CHART_WIDTH - RIGHT_PAD}
+          x2={availableWidth - RIGHT_PAD}
           y1={qtyToY(Y_MIN)}
           y2={qtyToY(Y_MIN)}
           stroke="#e5e7eb"
@@ -480,7 +501,6 @@ const StockDotPlot: React.FC<StockDotPlotProps> = ({
                 </g>
               );
             } else if (is_available && !is_quantity_disclose) {
-              // In stock but undisclosed — dashed ring near bottom
               const cx = dateToX(di);
               const cy = qtyToY(Y_MIN) - 8;
               return (
@@ -500,7 +520,6 @@ const StockDotPlot: React.FC<StockDotPlotProps> = ({
                 />
               );
             } else {
-              // Out of stock — small gray dash
               const cx = dateToX(di);
               return (
                 <line
@@ -522,134 +541,133 @@ const StockDotPlot: React.FC<StockDotPlotProps> = ({
         })}
       </svg>
 
-      {/* ── FIXED Tooltip: shows only sizes sharing the hovered quantity ──────── */}
-      {tooltip && (() => {
-        const snapshot = grouped[tooltip.date] ?? {};
-        const hoveredInfo = snapshot[tooltip.size];
+      {/* Tooltip */}
+      {tooltip &&
+        (() => {
+          const snapshot = grouped[tooltip.date] ?? {};
+          const hoveredInfo = snapshot[tooltip.size];
 
-        // Determine the "bucket" of the hovered dot
-        const isHoveredDisclosed =
-          hoveredInfo?.is_available && hoveredInfo?.is_quantity_disclose;
-        const isHoveredUndisclosed =
-          hoveredInfo?.is_available && !hoveredInfo?.is_quantity_disclose;
-        const hoveredQty = isHoveredDisclosed ? hoveredInfo.quantity : null;
+          const isHoveredDisclosed =
+            hoveredInfo?.is_available && hoveredInfo?.is_quantity_disclose;
+          const isHoveredUndisclosed =
+            hoveredInfo?.is_available && !hoveredInfo?.is_quantity_disclose;
+          const hoveredQty = isHoveredDisclosed ? hoveredInfo.quantity : null;
 
-        // Filter to only sizes in the same bucket
-        const filteredSizes = sizes.filter((s) => {
-          const info = snapshot[s];
-          if (isHoveredDisclosed) {
-            // Same disclosed quantity level
-            return (
-              info?.is_available &&
-              info?.is_quantity_disclose &&
-              info.quantity === hoveredQty
-            );
-          } else if (isHoveredUndisclosed) {
-            // All undisclosed-but-available sizes
-            return info?.is_available && !info?.is_quantity_disclose;
-          } else {
-            // All OOS sizes
-            return !info?.is_available;
-          }
-        });
+          const filteredSizes = sizes.filter((s) => {
+            const info = snapshot[s];
+            if (isHoveredDisclosed) {
+              return (
+                info?.is_available &&
+                info?.is_quantity_disclose &&
+                info.quantity === hoveredQty
+              );
+            } else if (isHoveredUndisclosed) {
+              return info?.is_available && !info?.is_quantity_disclose;
+            } else {
+              return !info?.is_available;
+            }
+          });
 
-        return (
-          <div style={getTooltipStyle()}>
-            {/* Date header */}
-            <div
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                color: "#9ca3af",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                marginBottom: 8,
-                paddingBottom: 6,
-                borderBottom: "1px solid #f3f4f6",
-              }}
-            >
-              {tooltip.date}
-            </div>
+          return (
+            <div style={getTooltipStyle()}>
+              <div
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: "#9ca3af",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  marginBottom: 8,
+                  paddingBottom: 6,
+                  borderBottom: "1px solid #f3f4f6",
+                }}
+              >
+                {tooltip.date}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                {filteredSizes.map((size) => {
+                  const globalIdx = sizes.indexOf(size);
+                  const color = colors[globalIdx % colors.length];
+                  const info = snapshot[size];
+                  const isAvailable = info?.is_available ?? false;
+                  const isDisclosed = info?.is_quantity_disclose ?? false;
+                  const qty = info?.quantity ?? 0;
+                  const display = renderQty(isAvailable, isDisclosed, qty);
 
-            {/* Only sizes sharing this quantity level */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-              {filteredSizes.map((size) => {
-                const globalIdx = sizes.indexOf(size);
-                const color = colors[globalIdx % colors.length];
-                const info = snapshot[size];
-                const isAvailable = info?.is_available ?? false;
-                const isDisclosed = info?.is_quantity_disclose ?? false;
-                const qty = info?.quantity ?? 0;
-                const display = renderQty(isAvailable, isDisclosed, qty);
-
-                return (
-                  <div
-                    key={size}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 10,
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span
+                  return (
+                    <div
+                      key={size}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 10,
+                      }}
+                    >
+                      <div
                         style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: "50%",
-                          backgroundColor: color,
-                          flexShrink: 0,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
                         }}
-                      />
+                      >
+                        <span
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: "50%",
+                            backgroundColor: color,
+                            flexShrink: 0,
+                          }}
+                        />
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: "#374151",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                          }}
+                        >
+                          {size}
+                        </span>
+                      </div>
                       <span
                         style={{
                           fontSize: 11,
-                          fontWeight: 700,
-                          color: "#374151",
-                          textTransform: "uppercase",
-                          letterSpacing: "0.05em",
+                          fontWeight: 800,
+                          color: isAvailable
+                            ? isDisclosed
+                              ? color
+                              : "#BA7517"
+                            : "#d1d5db",
+                          background: isAvailable
+                            ? isDisclosed
+                              ? `${color}15`
+                              : "#fffbeb"
+                            : "#f9fafb",
+                          border: `1px solid ${
+                            isAvailable
+                              ? isDisclosed
+                                ? `${color}30`
+                                : "#fde68a"
+                              : "#e5e7eb"
+                          }`,
+                          borderRadius: 6,
+                          padding: "1px 7px",
+                          minWidth: 32,
+                          textAlign: "center",
                         }}
                       >
-                        {size}
+                        {display}
                       </span>
                     </div>
-                    <span
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 800,
-                        color: isAvailable
-                          ? isDisclosed
-                            ? color
-                            : "#BA7517"
-                          : "#d1d5db",
-                        background: isAvailable
-                          ? isDisclosed
-                            ? `${color}15`
-                            : "#fffbeb"
-                          : "#f9fafb",
-                        border: `1px solid ${
-                          isAvailable
-                            ? isDisclosed
-                              ? `${color}30`
-                              : "#fde68a"
-                            : "#e5e7eb"
-                        }`,
-                        borderRadius: 6,
-                        padding: "1px 7px",
-                        minWidth: 32,
-                        textAlign: "center",
-                      }}
-                    >
-                      {display}
-                    </span>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
     </div>
   );
 };
@@ -661,7 +679,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
   onBack,
 }) => {
   const [activeTab, setActiveTab] = useState<"price_history" | "analytics">(
-    "price_history"
+    "price_history",
   );
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 8;
@@ -677,7 +695,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
     queryFn: () =>
       analyticsService.getProductSizeHistory(
         product.is_new_launch ? "new_arrival" : "bestseller",
-        product.id
+        product.id,
       ),
     enabled: activeTab === "analytics",
   });
@@ -685,7 +703,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
   const { chartData, tableRows } = useMemo(() => {
     const desc = [...history].sort(
       (a, b) =>
-        new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime()
+        new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime(),
     );
     return {
       chartData: [...desc].reverse().map((h) => ({
@@ -706,7 +724,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
     const sorted = [...sizeHistory].sort(
       (a, b) =>
-        new Date(a.captured_at).getTime() - new Date(b.captured_at).getTime()
+        new Date(a.captured_at).getTime() - new Date(b.captured_at).getTime(),
     );
 
     const grouped = sorted.reduce((acc: any, curr: any) => {
@@ -722,7 +740,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
     const dates = Object.keys(grouped);
     const sizes = Array.from(
-      new Set(sorted.map((s: any) => s.size))
+      new Set(sorted.map((s: any) => s.size)),
     ).sort() as string[];
 
     const chart = dates.map((date) => {
@@ -746,7 +764,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
   const totalPages = Math.ceil(tableRows.length / PAGE_SIZE);
   const paginatedRows = tableRows.slice(
     (page - 1) * PAGE_SIZE,
-    page * PAGE_SIZE
+    page * PAGE_SIZE,
   );
 
   const lowestPrice = history.length
@@ -765,13 +783,13 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
     if (!analyticsData || !latestDate) return null;
     const snapshot = analyticsData.grouped[latestDate];
     const available = analyticsData.sizes.filter(
-      (s) => snapshot[s]?.is_available
+      (s) => snapshot[s]?.is_available,
     );
     const total = analyticsData.sizes.reduce(
       (sum, s) =>
         sum +
-        (snapshot[s]?.is_quantity_disclose ? snapshot[s]?.quantity ?? 0 : 0),
-      0
+        (snapshot[s]?.is_quantity_disclose ? (snapshot[s]?.quantity ?? 0) : 0),
+      0,
     );
     const low = analyticsData.sizes.filter((s) => {
       const info = snapshot[s];
@@ -785,7 +803,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
       low: low.length,
       totalSizes: analyticsData.sizes.length,
       hasUndisclosed: analyticsData.sizes.some(
-        (s) => snapshot[s]?.is_available && !snapshot[s]?.is_quantity_disclose
+        (s) => snapshot[s]?.is_available && !snapshot[s]?.is_quantity_disclose,
       ),
     };
   }, [analyticsData, latestDate]);
@@ -922,9 +940,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
               className="space-y-5"
             >
               <div className="flex items-center gap-2 text-xs">
-                <span className="text-gray-400 font-medium">
-                  Filter Range:
-                </span>
+                <span className="text-gray-400 font-medium">Filter Range:</span>
                 <span className="text-gray-400 ml-2">From</span>
                 <input
                   type="date"
@@ -1055,8 +1071,8 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                 row.change < 0
                                   ? "text-green-600"
                                   : row.change > 0
-                                  ? "text-red-500"
-                                  : "text-gray-400"
+                                    ? "text-red-500"
+                                    : "text-gray-400"
                               }`}
                             >
                               {row.change === 0
@@ -1123,9 +1139,10 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                   <p className="text-xs text-gray-400 mt-1">Check back soon</p>
                 </div>
               ) : (
-                <>
+                // ── SINGLE CARD containing all three sections ──────────────
+                <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
                   {/* ── Section 1: Current Stock ── */}
-                  <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                  <div className="border-b border-gray-100">
                     <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                       <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
                         Current Stock
@@ -1233,8 +1250,8 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                     </div>
                   </div>
 
-                  {/* ── Section 2: Stock Trend Dot Plot ── */}
-                  <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                  {/* ── Section 2: Stock Trend (full width) ── */}
+                  <div className="border-b border-gray-100 w-full flex flex-col">
                     <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                       <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
                         Stock Trend
@@ -1254,13 +1271,10 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                       />
                     </div>
 
-                    {/* Legend */}
-                    <div className="flex flex-wrap gap-3 px-4 pb-4 pt-1">
+                    {/* Size legend */}
+                    <div className="flex flex-wrap gap-3 px-4 pb-3 pt-1">
                       {analyticsData.sizes.map((size, idx) => (
-                        <div
-                          key={size}
-                          className="flex items-center gap-1.5"
-                        >
+                        <div key={size} className="flex items-center gap-1.5">
                           <span
                             className="w-2 h-2 rounded-full"
                             style={{
@@ -1275,8 +1289,8 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                       ))}
                     </div>
 
-                    {/* Legend hint */}
-                    <div className="px-4 pb-3 flex gap-4">
+                    {/* Symbol legend */}
+                    <div className="px-4 pb-4 flex gap-4">
                       <div className="flex items-center gap-1.5">
                         <svg width={14} height={14}>
                           <circle
@@ -1312,27 +1326,27 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                     </div>
                   </div>
 
-                  {/* ── Section 3: Inventory History Table ── */}
-                  <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                  {/* ── Section 3: Inventory History Table (full width) ── */}
+                  <div className="w-full flex flex-col">
                     <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                       <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
                         Inventory History
                       </span>
                       <span className="text-[10px] text-gray-400 italic">
-                        N/A = in stock, qty undisclosed
+                        N/A = qty undisclosed
                       </span>
                     </div>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-xs min-w-[400px]">
+                      <table className="w-full text-xs">
                         <thead>
                           <tr className="bg-gray-50 border-b border-gray-100">
-                            <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider sticky left-0 bg-gray-50">
+                            <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider sticky left-0 bg-gray-50">
                               Size
                             </th>
                             {analyticsData.dates.map((date) => (
                               <th
                                 key={date}
-                                className="px-4 py-3 text-center text-[10px] font-bold text-gray-400 uppercase tracking-wider"
+                                className="px-3 py-3 text-center text-[10px] font-bold text-gray-400 uppercase tracking-wider"
                               >
                                 {date}
                               </th>
@@ -1345,7 +1359,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                               key={size}
                               className="border-t border-gray-50 hover:bg-gray-50/40 transition-colors"
                             >
-                              <td className="px-5 py-3 font-bold text-gray-800 sticky left-0 bg-white">
+                              <td className="px-4 py-3 font-bold text-gray-800 sticky left-0 bg-white">
                                 {size}
                               </td>
                               {analyticsData.dates.map((date) => {
@@ -1358,13 +1372,13 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                 const display = renderQty(
                                   inStock,
                                   isDisclosed,
-                                  qty
+                                  qty,
                                 );
 
                                 return (
                                   <td
                                     key={date}
-                                    className="px-4 py-3 text-center"
+                                    className="px-3 py-3 text-center"
                                   >
                                     <span
                                       className={`inline-flex items-center justify-center w-7 h-7 rounded-lg text-[10px] font-bold ${
@@ -1384,7 +1398,8 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                       </table>
                     </div>
                   </div>
-                </>
+                </div>
+                // ── END SINGLE CARD ─────────────────────────────────────────
               )}
             </motion.div>
           )}

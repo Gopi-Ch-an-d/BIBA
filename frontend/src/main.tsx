@@ -8,6 +8,7 @@ import { Toaster } from "react-hot-toast";
 import "./index.css";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-quartz.css";
+import clsx from "clsx";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -32,11 +33,28 @@ const queryClient = new QueryClient({
   },
 });
 
+import { useLocation } from "react-router-dom";
+
 function Layout() {
+  const location = useLocation();
+  const isOverview = location.pathname === "/overview";
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
       <Sidebar />
-      <main className="flex-1 flex flex-col h-full overflow-y-auto overflow-x-hidden p-8 relative">
+      <main 
+        className={clsx(
+          "flex-1 flex flex-col h-full overflow-y-auto overflow-x-hidden relative transition-all duration-500",
+          isOverview ? "bg-transparent pt-4 px-8 pb-8" : "bg-slate-50 p-8"
+        )}
+        style={isOverview ? {
+          backgroundImage: "linear-gradient(to bottom, rgba(255,255,255,0.05), rgba(255,255,255,0.2)), url('/images/overview-background.png')",
+          backgroundSize: "100% auto",
+          backgroundPosition: "left top",
+          backgroundRepeat: "no-repeat",
+          backgroundAttachment: "fixed"
+        } : {}}
+      >
         <Routes>
           <Route path="/" element={<Navigate to="/overview" replace />} />
           <Route path="/overview" element={<ProtectedRoute><Overview /></ProtectedRoute>} />

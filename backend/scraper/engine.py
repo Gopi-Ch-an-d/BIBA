@@ -510,11 +510,20 @@ class WScraper(BaseScraper):
         is_bs_url = "bestseller" in url.lower() or "bestseller" in cat_name.lower()
         is_new_url = "new" in url.lower()
 
-        logger.info(f"[W] Starting Page-by-Page scraping for {cat_name}...")
+        # Support starting from a specific page (e.g. to resume after a crash)
+        start_page = int(os.getenv("SCRAPE_START_PAGE", "1"))
+        if start_page > 1:
+            sep = "&" if "?" in url else "?"
+            url = f"{url}{sep}page={start_page}"
+            logger.info(f"[W] Resuming from Page {start_page} via URL: {url}")
+            self.driver.get(url)
+            human_delay(3, 6)
+
+        logger.info(f"[W] Starting Page-by-Page scraping for {cat_name} from Page {start_page}...")
 
         products = []
         seen_skus = set()
-        page_attempt = 1
+        page_attempt = start_page
         max_pages = 100
 
         while page_attempt <= max_pages:

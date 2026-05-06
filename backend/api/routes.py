@@ -22,7 +22,7 @@ from api.auth import create_access_token, verify_password, get_current_user
 from api.schemas import (
     CompetitorCreate, CompetitorOut,
     ProductOut, ProductListResponse,
-    PriceHistoryPoint,
+    PriceHistoryPoint, NewArrivalTrendPoint,
     CompetitorOverviewCard,
     ScrapeLogOut,
     TriggerScrapeResponse,
@@ -381,6 +381,45 @@ async def price_trend(
             discount_pct=round(r.discount_pct, 1) if r.discount_pct else None,
         )
         for r in rows
+    ]
+
+
+@router.get("/analytics/new-arrivals-trend", response_model=list[NewArrivalTrendPoint], tags=["Analytics"])
+async def new_arrivals_trend(
+    competitor_id: Optional[int] = Query(None),
+    days: int = Query(30, ge=7, le=90),
+    db: AsyncSession = Depends(get_db),
+):
+    """Daily count of truly NEW products detected over the last N days."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    
+    q = (
+        select(
+            func.date(NewArrivalProduct.first_seen_at).label("date"),
+            Competitor.name.label("competitor_name"),
+            func.count(NewArrivalProduct.record_id).label("count")
+        )
+        .join(Competitor, NewArrivalProduct.competitor_id == Competitor.record_id)
+        .where(
+            NewArrivalProduct.first_seen_at >= cutoff,
+            NewArrivalProduct.is_deleted == False
+        )
+    )
+    
+    if competitor_id:
+        q = q.where(NewArrivalProduct.competitor_id == competitor_id)
+        
+    q = q.group_by("date", "competitor_name").order_by("date")
+    
+    results = (await db.execute(q)).all()
+    
+    return [
+        NewArrivalTrendPoint(
+            date=r.date, 
+            count=r.count,
+            competitor_name=r.competitor_name
+        )
+        for r in results
     ]
 
 

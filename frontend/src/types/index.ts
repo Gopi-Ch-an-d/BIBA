@@ -53,6 +53,12 @@ export interface PriceHistoryPoint {
   discount_pct: number;
 }
 
+export interface NewArrivalTrendPoint {
+  date: string;
+  count: number;
+  competitor_name: string;
+}
+
 export interface PriceHistoryRecord {
   record_id: number;
   source: string;

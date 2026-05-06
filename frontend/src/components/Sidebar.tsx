@@ -14,12 +14,12 @@ import {
   LogOut,
 } from "lucide-react";
 import clsx from "clsx";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { authService } from "../services/api";
 
 const NAV = [
   { to: "/", icon: LayoutDashboard, label: "Overview" },
-    { to: "/competitors", icon: Radio, label: "Competitors" },
+  { to: "/competitors", icon: Radio, label: "Competitors" },
   { to: "/market-catalog", icon: Package, label: "Market Catalog" },
   { to: "/new-arrivals", icon: BarChart3, label: "New Arrivals" },
   { to: "/bestsellers", icon: TrendingUp, label: "Bestsellers" },
@@ -35,9 +35,13 @@ const Sidebar: React.FC = () => {
   return (
     <aside
       className={clsx(
-        "flex h-screen flex-col bg-white border-r border-slate-100 shrink-0 transition-all duration-300 no-print",
+        "flex h-screen flex-col shrink-0 transition-all duration-300 no-print border-r",
         collapsed ? "w-16" : "w-60"
       )}
+      style={{
+        background: "#F8F5F5",
+        borderColor: "#EFDCDC",
+      }}
     >
       {/* Brand & Toggle */}
       <div
@@ -53,17 +57,25 @@ const Sidebar: React.FC = () => {
             className="h-20 w-auto object-contain"
           />
         )}
+
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors"
+          className="p-2 rounded-lg transition-colors"
+          style={{
+            color: "#B89B9B",
+          }}
           title={collapsed ? "Expand" : "Collapse"}
         >
-          {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+          {collapsed ? (
+            <PanelLeftOpen size={18} />
+          ) : (
+            <PanelLeftClose size={18} />
+          )}
         </button>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
+      <nav className="flex-1 overflow-y-auto px-2 py-2 space-y-1">
         {NAV.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
@@ -71,30 +83,37 @@ const Sidebar: React.FC = () => {
             end={to === "/"}
             className={({ isActive }) =>
               clsx(
-                "relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-colors",
+                "relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200",
                 collapsed && "justify-center",
                 isActive
                   ? "text-[#c0392b]"
-                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                  : "text-slate-500 hover:text-slate-800"
               )
             }
             style={({ isActive }) =>
               isActive
-                ? { backgroundColor: "rgba(192, 57, 43, 0.08)" }
+                ? {
+                    background:
+                      "linear-gradient(135deg, rgba(231,185,185,0.22), rgba(248,245,245,0.9))",
+                    boxShadow: "0 2px 8px rgba(231,185,185,0.15)",
+                  }
                 : {}
             }
           >
             {({ isActive }) => (
-              <motion.div 
+              <motion.div
                 className="flex items-center gap-3 w-full"
                 whileHover={{ x: 2 }}
                 whileTap={{ scale: 0.98 }}
               >
                 <Icon size={18} className="shrink-0" />
+
                 {!collapsed && (
-                  <span className="whitespace-nowrap flex-1">{label}</span>
+                  <span className="whitespace-nowrap flex-1">
+                    {label}
+                  </span>
                 )}
-                {/* Active dot indicator */}
+
                 {isActive && !collapsed && (
                   <motion.span
                     layoutId="active-dot"
@@ -102,6 +121,7 @@ const Sidebar: React.FC = () => {
                     style={{ backgroundColor: "#c0392b" }}
                   />
                 )}
+
                 {isActive && collapsed && (
                   <motion.span
                     layoutId="active-dot-collapsed"
@@ -115,22 +135,38 @@ const Sidebar: React.FC = () => {
         ))}
       </nav>
 
-      {/* Minimal status footer & Logout */}
-      <div className="px-3 py-4 border-t border-slate-100 space-y-2">
+      {/* Footer */}
+      <div
+        className="px-3 py-4 space-y-2"
+        style={{
+          borderTop: "1px solid #EFDCDC",
+        }}
+      >
         <button
           onClick={() => authService.logout()}
           className={clsx(
-            "flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-[13px] font-bold text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-all",
+            "flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-[13px] font-bold transition-all",
             collapsed && "justify-center"
           )}
+          style={{
+            color: "#B89B9B",
+          }}
         >
           <LogOut size={18} />
+
           {!collapsed && <span>Logout</span>}
         </button>
+
         {!collapsed && (
-          <div className="flex items-center gap-2 px-3 pt-2 opacity-50">
+          <div className="flex items-center gap-2 px-3 pt-2 opacity-70">
             <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">System Live</span>
+
+            <span
+              className="text-[10px] font-bold uppercase tracking-wider"
+              style={{ color: "#B89B9B" }}
+            >
+              System Live
+            </span>
           </div>
         )}
       </div>

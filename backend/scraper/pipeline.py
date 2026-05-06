@@ -328,7 +328,7 @@ def run_scrape_for_competitor(competitor_name: str, db_session: Session) -> dict
             db_session.execute(
                 update(BestsellerProduct)
                 .where(BestsellerProduct.record_id.in_(to_deactivate_bs))
-                .values(is_active=False, stock_available=False, last_updated_at=now)
+                .values(is_active=False, last_updated_at=now)
             )
 
         if to_deactivate_na:
@@ -338,7 +338,7 @@ def run_scrape_for_competitor(competitor_name: str, db_session: Session) -> dict
             db_session.execute(
                 update(NewArrivalProduct)
                 .where(NewArrivalProduct.record_id.in_(to_deactivate_na))
-                .values(is_active=False, stock_available=False, last_updated_at=now)
+                .values(is_active=False, last_updated_at=now)
             )
 
         # ── Final commit ───────────────────────────────────────────────────────
