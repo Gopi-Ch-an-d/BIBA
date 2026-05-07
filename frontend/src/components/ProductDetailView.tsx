@@ -1014,8 +1014,12 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                       },
                       {
                         label: "Total change",
-                        value: "—",
-                        color: "text-gray-400",
+                        value: history.length > 1 
+                          ? `${history[0].price - history[history.length - 1].price < 0 ? "↓" : "↑"} ₹${Math.abs(history[0].price - history[history.length - 1].price).toLocaleString()} (${((Math.abs(history[0].price - history[history.length - 1].price) / history[history.length - 1].price) * 100).toFixed(1)}%)`
+                          : "—",
+                        color: history.length > 1 
+                          ? (history[0].price - history[history.length - 1].price < 0 ? "text-green-600" : "text-red-500") 
+                          : "text-gray-400",
                       },
                     ].map((s) => (
                       <div key={s.label} className="bg-gray-50 rounded-lg p-3">
