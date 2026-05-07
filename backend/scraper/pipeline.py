@@ -112,13 +112,15 @@ def _upsert_specialized(session: Session, competitor: Competitor, raw: RawProduc
                     f"disclosed qty=0 overrides is_available to False"
                 )
 
-            # ── DEDUPLICATION: Only insert if changed ───────────────────────
+            # ── DEDUPLICATION: Only skip if same state AND same day ────────────
+            # This ensures we have at least one record per day for the history table
             last_s = size_map.get(s_name)
             if last_s:
                 if (last_s.quantity == qty and 
                     last_s.is_available == is_available and 
-                    last_s.is_quantity_disclose == disclosed):
-                    # No change, skip insert
+                    last_s.is_quantity_disclose == disclosed and
+                    last_s.last_updated_at.date() == now.date()):
+                    # No change since last record TODAY, skip insert
                     continue
 
             # ── INSERT if new or changed ──

@@ -727,21 +727,37 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
         new Date(a.captured_at).getTime() - new Date(b.captured_at).getTime(),
     );
 
-    const grouped = sorted.reduce((acc: any, curr: any) => {
+    const rawGrouped = sorted.reduce((acc: any, curr: any) => {
       const dateStr = format(parseISO(curr.captured_at), "MMM dd");
-      if (!acc[dateStr]) acc[dateStr] = {};
-      acc[dateStr][curr.size] = {
-        quantity: curr.quantity,
-        is_available: curr.is_available,
-        is_quantity_disclose: curr.is_quantity_disclose,
-      };
+      if (!acc[dateStr]) acc[dateStr] = [];
+      acc[dateStr].push(curr);
       return acc;
     }, {});
 
-    const dates = Object.keys(grouped);
-    const sizes = Array.from(
-      new Set(sorted.map((s: any) => s.size)),
-    ).sort() as string[];
+    const dates = Object.keys(rawGrouped);
+    const sizes = Array.from(new Set(sorted.map((s: any) => s.size))).sort() as string[];
+
+    const grouped: any = {};
+    const lastKnownState: Record<string, any> = {};
+
+    dates.forEach((date) => {
+      grouped[date] = {};
+      // Update our "current state" with changes that happened on this day
+      rawGrouped[date].forEach((r: any) => {
+        lastKnownState[r.size] = {
+          quantity: r.quantity,
+          is_available: r.is_available,
+          is_quantity_disclose: r.is_quantity_disclose,
+        };
+      });
+
+      // Fill this date's bucket with the latest known state for EVERY size
+      sizes.forEach((size) => {
+        if (lastKnownState[size]) {
+          grouped[date][size] = { ...lastKnownState[size] };
+        }
+      });
+    });
 
     const chart = dates.map((date) => {
       const row: any = { date };
@@ -779,34 +795,51 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
   const latestDate = analyticsData?.dates[analyticsData.dates.length - 1];
 
+  const latestState = useMemo(() => {
+    if (!analyticsData) return {};
+    const state: Record<string, any> = {};
+    // Iterate through dates in chronological order to build the latest state for each size
+    analyticsData.dates.forEach((date) => {
+      const snap = analyticsData.grouped[date];
+      Object.keys(snap).forEach((size) => {
+        state[size] = snap[size];
+      });
+    });
+    return state;
+  }, [analyticsData]);
+
   const stockSummary = useMemo(() => {
-    if (!analyticsData || !latestDate) return null;
-    const snapshot = analyticsData.grouped[latestDate];
+    if (!analyticsData || Object.keys(latestState).length === 0) return null;
+
     const available = analyticsData.sizes.filter(
-      (s) => snapshot[s]?.is_available,
+      (s) => latestState[s]?.is_available,
     );
     const total = analyticsData.sizes.reduce(
       (sum, s) =>
         sum +
-        (snapshot[s]?.is_quantity_disclose ? (snapshot[s]?.quantity ?? 0) : 0),
+        (latestState[s]?.is_quantity_disclose
+          ? latestState[s]?.quantity ?? 0
+          : 0),
       0,
     );
     const low = analyticsData.sizes.filter((s) => {
-      const info = snapshot[s];
+      const info = latestState[s];
       return (
         info?.is_available && info?.is_quantity_disclose && info?.quantity <= 5
       );
     });
+
     return {
       available: available.length,
       total,
       low: low.length,
       totalSizes: analyticsData.sizes.length,
       hasUndisclosed: analyticsData.sizes.some(
-        (s) => snapshot[s]?.is_available && !snapshot[s]?.is_quantity_disclose,
+        (s) =>
+          latestState[s]?.is_available && !latestState[s]?.is_quantity_disclose,
       ),
     };
-  }, [analyticsData, latestDate]);
+  }, [analyticsData, latestState]);
 
   return (
     <motion.div
@@ -1207,9 +1240,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
 
                     <div className="flex flex-wrap gap-2 p-4">
                       {analyticsData.sizes.map((size) => {
-                        const info = latestDate
-                          ? analyticsData.grouped[latestDate]?.[size]
-                          : null;
+                        const info = latestState[size];
                         const qty = info?.quantity ?? 0;
                         const inStock = info?.is_available ?? false;
                         const isDisclosed = info?.is_quantity_disclose ?? false;

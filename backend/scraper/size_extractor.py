@@ -79,20 +79,26 @@ def extract_size_quantities(url: str) -> dict[str, dict]:
                 if is_sold_out_class:
                     is_available = False
                 else:
+                    # ── Extraction Logic ──────────────────────────────────────────────
+                    # Check for quantity text (e.g. "Only 4 left")
                     span = label.find("span", class_="data_variant__quantity")
                     if not span:
                         span = label.find("span", class_="data_variant__qunatity")
-
-                    if span:
-                        span_text = span.get_text(strip=True)
-                        match = re.search(r"(\d+)", span_text)
-                        if match:
-                            qty = int(match.group(1))
-                            disclosed = True
-                            is_available = qty > 0
-                        else:
-                            is_available = True
+                    if not span:
+                        span = label.find("span", class_="variant-quantity")
+                    
+                    # Search for numbers in the span or the entire label text as fallback
+                    search_text = span.get_text(strip=True) if span else label.get_text(strip=True)
+                    match = re.search(r"(\d+)", search_text)
+                    
+                    if match:
+                        qty = int(match.group(1))
+                        disclosed = True
+                        is_available = qty > 0
                     else:
+                        # No number found. If label exists and not sold out, it's available but hidden.
+                        qty = 0
+                        disclosed = False
                         is_available = True
             else:
                 is_available = not radio_disabled
