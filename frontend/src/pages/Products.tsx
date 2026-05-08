@@ -141,7 +141,7 @@ const Products: React.FC = () => {
       ),
     },
     {
-      headerName: "Brand",
+      headerName: "Competitor",
       field: "competitor_id",
       width: 130,
       valueGetter: (params) => {
