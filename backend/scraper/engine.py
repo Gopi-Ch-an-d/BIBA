@@ -352,7 +352,7 @@ class WScraper(BaseScraper):
     COMPETITOR_NAME = "W"
     _size_cache = {}
 
-    def _parse_product_card(self, card, category_name: str = "apparel") -> Optional[RawProduct]:
+    def _parse_product_card(self, card, category_name: str = "apparel", seen_skus: set = None) -> Optional[RawProduct]:
         import re
         try:
             # ── Product URL & SKU ──────────────────────────────────────────────
@@ -375,6 +375,9 @@ class WScraper(BaseScraper):
                 return None
 
             sku = product_url.split("/products/")[-1].split("?")[0]
+
+            if seen_skus and sku in seen_skus:
+                return None
 
             # ── Product Name ───────────────────────────────────────────────────
             name = safe_text(card, ".card-information .card-information__text")
@@ -552,7 +555,7 @@ class WScraper(BaseScraper):
 
             for card in cards:
                 try:
-                    parsed = self._parse_product_card(card, category_name=cat_name)
+                    parsed = self._parse_product_card(card, category_name=cat_name, seen_skus=seen_skus)
 
                     if parsed and parsed.sku and parsed.sku not in seen_skus:
                         if is_bs_url:

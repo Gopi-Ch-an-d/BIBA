@@ -349,14 +349,14 @@ const Overview: React.FC = () => {
   const { data: overview = [] } = useQuery<CompetitorOverviewCard[]>({
     queryKey: ["overview"],
     queryFn: competitorService.getOverview,
-    refetchInterval: 60000,
+    refetchInterval: 2000,
   });
 
   // ── New Arrivals Trend ──
   const { data: newArrivalsTrend = [] } = useQuery<NewArrivalTrendPoint[]>({
     queryKey: ["newArrivalsTrend"],
     queryFn: () => analyticsService.getNewArrivalsTrend({ days: 14 }),
-    refetchInterval: 60000,
+    refetchInterval: 2000,
   });
 
   const { data: competitors = [] } = useQuery<Competitor[]>({

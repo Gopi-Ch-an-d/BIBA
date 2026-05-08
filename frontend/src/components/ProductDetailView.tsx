@@ -943,7 +943,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
             }}
             className={`py-4 text-sm font-bold border-b-2 transition-all relative flex items-center gap-2 ${
               activeTab === tab.id
-                ? "border-blue-600 text-blue-600"
+                ? "border-red-400 text-red-400"
                 : "border-transparent text-gray-400 hover:text-gray-500"
             }`}
           >
@@ -952,7 +952,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
             {activeTab === tab.id && (
               <motion.div
                 layoutId="activeTabUnderline"
-                className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"
+                className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-400"
               />
             )}
           </button>

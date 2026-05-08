@@ -49,6 +49,7 @@ const NewArrivals: React.FC = () => {
         sort_by: "first_seen_at",
         sort_dir: "desc",
       }),
+    refetchInterval: 2000,
   });
 
   const latestDateStr = data?.products[0]?.first_seen_at?.split("T")[0];

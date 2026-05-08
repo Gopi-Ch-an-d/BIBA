@@ -63,6 +63,7 @@ const Products: React.FC = () => {
         page: page,
         page_size: PAGE_SIZE,
       }),
+    refetchInterval: 2000,
   });
 
   // ── Export CSV ──────────────────────────────────────────────────────────────
