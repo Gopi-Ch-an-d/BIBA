@@ -26,7 +26,7 @@ const Exports: React.FC = () => {
   });
 
   const [competitorId, setCompetitorId] = useState<string>('');
-  const [isNewLaunch, setIsNewLaunch] = useState<string>('');
+  const [isNewLaunch, setIsNewLaunch] = useState<string>('false');
 
   const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
 
@@ -80,9 +80,9 @@ const Exports: React.FC = () => {
               value={isNewLaunch} 
               onChange={e => setIsNewLaunch(e.target.value)}
             >
-              <option value="">Full catalog (All products)</option>
-              <option value="true">New Arrivals Only</option>
-              <option value="false">Stable Inventory Only</option>
+              <option value="">Both (Best Sellers & New Arrivals)</option>
+              <option value="false">Best Sellers</option>
+              <option value="true">New Arrivals</option>
             </select>
           </div>
         </div>

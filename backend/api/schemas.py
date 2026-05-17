@@ -7,6 +7,87 @@ from typing import Optional, Any
 from pydantic import BaseModel, Field
 
 
+# ── Roles ──────────────────────────────────────────────────────────────────
+
+class RoleCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    code: str = Field(..., min_length=1, max_length=50)
+    description: Optional[str] = None
+
+class RoleOut(BaseModel):
+    id: int = Field(validation_alias="record_id")
+    name: str
+    code: str
+    description: Optional[str]
+    is_active: bool
+    inserted_datetime: datetime
+
+    class Config:
+        from_attributes = True
+        populate_by_name = True
+
+# ── Users ──────────────────────────────────────────────────────────────────
+
+class UserCreate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: str = Field(..., pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$")
+    password: str = Field(..., min_length=6)
+    role_id: Optional[int] = None
+
+class UserOut(BaseModel):
+    id: int = Field(validation_alias="record_id")
+    first_name: Optional[str]
+    last_name: Optional[str]
+    email: str
+    phone: Optional[str]
+    role_id: Optional[int]
+    is_active: bool
+    inserted_datetime: datetime
+
+    class Config:
+        from_attributes = True
+        populate_by_name = True
+
+class UserUpdate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    role_id: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+# ── Employees ──────────────────────────────────────────────────────────────
+
+class EmployeeCreate(BaseModel):
+    user_id: Optional[int] = None
+    employee_code: str = Field(..., min_length=1, max_length=50)
+    department: Optional[str] = None
+    designation: Optional[str] = None
+    joined_date: Optional[date] = None
+
+class EmployeeOut(BaseModel):
+    id: int = Field(validation_alias="record_id")
+    user_id: Optional[int]
+    employee_code: Optional[str]
+    department: Optional[str]
+    designation: Optional[str]
+    joined_date: Optional[date]
+    is_active: bool
+    inserted_datetime: datetime
+
+    class Config:
+        from_attributes = True
+        populate_by_name = True
+
+class EmployeeUpdate(BaseModel):
+    department: Optional[str] = None
+    designation: Optional[str] = None
+    joined_date: Optional[date] = None
+    is_active: Optional[bool] = None
+
+
 # ── Competitors ────────────────────────────────────────────────────────────────
 
 # ── Categories ────────────────────────────────────────────────────────────────
@@ -41,6 +122,14 @@ class CategoryCreate(BaseModel):
 class CompetitorCreate(CompetitorBase):
     base_url: str = Field(..., pattern=r"^https?://")
     categories: list[CategoryCreate] = []
+
+class CompetitorUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    code: Optional[str] = Field(None, min_length=1, max_length=20, pattern=r"^[A-Z0-9_]+$")
+    base_url: Optional[str] = Field(None, pattern=r"^https?://")
+    scraper_name: Optional[str] = Field(None, min_length=1)
+    is_active: Optional[bool] = None
+    categories: Optional[list[CategoryCreate]] = None
 
 class CompetitorOut(CompetitorBase):
     id: int = Field(validation_alias="record_id")

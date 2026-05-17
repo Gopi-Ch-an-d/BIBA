@@ -45,6 +45,7 @@ const Products: React.FC = () => {
   const [page, setPage] = useState(1);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [filterType, setFilterType] = useState<"all" | "bestseller" | "new">("all");
 
   const { data: competitors = [] } = useQuery<Competitor[]>({
     queryKey: ["competitors"],
@@ -54,7 +55,7 @@ const Products: React.FC = () => {
   const { data, isLoading } = useQuery({
     queryKey: [
       "products",
-      { competitor_id: competitorId, search, page, page_size: PAGE_SIZE },
+      { competitor_id: competitorId, search, page, page_size: PAGE_SIZE, filterType },
     ],
     queryFn: () =>
       productService.listProducts({
@@ -62,6 +63,8 @@ const Products: React.FC = () => {
         search: search || undefined,
         page: page,
         page_size: PAGE_SIZE,
+        is_bestseller: filterType === "bestseller" ? true : undefined,
+        is_new_launch: filterType === "new" ? true : undefined,
       }),
     refetchInterval: 2000,
   });
@@ -142,6 +145,42 @@ const Products: React.FC = () => {
       ),
     },
     {
+      headerName: "Status",
+      width: 100,
+      cellRenderer: (params: any) => {
+        const isNew = params.data.is_new_launch;
+        const isBestseller = params.data.is_bestseller;
+        
+        if (isNew) {
+          return (
+            <div className="flex items-center justify-center h-full">
+              <span
+                className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest shadow-sm"
+                style={{ backgroundColor: "#c0392b", color: "#fff" }}
+              >
+                New
+              </span>
+            </div>
+          );
+        }
+        
+        if (isBestseller) {
+          return (
+            <div className="flex items-center justify-center h-full">
+              <span
+                className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest shadow-sm"
+                style={{ backgroundColor: "#e74c3c", color: "#fff" }}
+              >
+                Best Seller
+              </span>
+            </div>
+          );
+        }
+        
+        return null;
+      },
+    },
+    {
       headerName: "Competitor",
       field: "competitor_id",
       width: 130,
@@ -171,7 +210,7 @@ const Products: React.FC = () => {
       field: "current_price",
       width: 110,
       valueFormatter: (params) =>
-        params.value ? `₹${params.value.toLocaleString()}` : "-",
+        params.value ? `Rs.${params.value.toLocaleString()}` : "-",
       cellClass: "font-black text-slate-900",
     },
     {
@@ -272,7 +311,7 @@ const Products: React.FC = () => {
               <div>
                 <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3">
                   <Package size={28} style={{ color: "#c0392b" }} />
-                  Market Inventory
+                  Products Catalog
                 </h1>
                 <p className="text-xs font-medium text-slate-400 mt-1 uppercase tracking-widest">
                   Cross-brand product catalog with real-time price & stock
@@ -339,6 +378,21 @@ const Products: React.FC = () => {
                   ))}
                 </select>
               </div>
+              
+              <div className="flex items-center gap-3 px-4 border-l border-slate-100">
+                <select
+                  className="text-sm font-black border-none bg-transparent text-slate-700 focus:ring-0 focus:outline-none outline-none cursor-pointer uppercase tracking-wider"
+                  value={filterType}
+                  onChange={(e) => {
+                    setFilterType(e.target.value as "all" | "bestseller" | "new");
+                    setPage(1);
+                  }}
+                >
+                  <option value="all">All Products</option>
+                  <option value="bestseller">Best Sellers</option>
+                  <option value="new">New Arrivals</option>
+                </select>
+              </div>
             </div>
 
             {/* Grid */}
@@ -366,7 +420,7 @@ const Products: React.FC = () => {
               </div>
 
               {/* Pagination inside grid card */}
-              <div className="flex items-center justify-between px-8 py-4 bg-white border-t border-slate-100 no-print">
+              <div className="flex items-center justify-between px-8 py-6 bg-white border-t border-slate-100 no-print">
                 <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
                   Total Products:{" "}
                   <span className="font-black" style={{ color: "#c0392b" }}>
@@ -404,15 +458,15 @@ const Products: React.FC = () => {
                 height: 100% !important;
               }
               .prod-grid .ag-header {
-                background-color: rgba(192, 57, 43, 0.06) !important;
+                background-color: #fceae7 !important;
                 border-bottom: 1px solid rgba(192, 57, 43, 0.12) !important;
               }
               .prod-grid .ag-header-cell-label {
-                color: #c0392b !important;
-                font-weight: 800 !important;
+                color: #7f1d1d !important;
+                font-weight: 700 !important;
                 text-transform: uppercase !important;
-                letter-spacing: 0.1em !important;
-                font-size: 10px !important;
+                letter-spacing: 0.05em !important;
+                font-size: 12px !important;
               }
               .prod-grid .ag-header-cell:hover {
                 background-color: rgba(192, 57, 43, 0.04) !important;

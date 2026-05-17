@@ -19,12 +19,13 @@ def extract_size_quantities(url: str) -> dict[str, dict]:
     max_retries = 3
     resp_text = None
     
+    referer = url.split("/products/")[0] + "/" if "/products/" in url else url
     for attempt in range(max_retries):
         headers = {
             "User-Agent": ua.random,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
-            "Referer": "https://www.wforwoman.com/",
+            "Referer": referer,
             "Cache-Control": "no-cache",
             "Pragma": "no-cache"
         }
@@ -87,16 +88,21 @@ def extract_size_quantities(url: str) -> dict[str, dict]:
                     if not span:
                         span = label.find("span", class_="variant-quantity")
                     
-                    # Search for numbers in the span or the entire label text as fallback
-                    search_text = span.get_text(strip=True) if span else label.get_text(strip=True)
-                    match = re.search(r"(\d+)", search_text)
-                    
-                    if match:
-                        qty = int(match.group(1))
-                        disclosed = True
-                        is_available = qty > 0
+                    # Search for numbers ONLY in the span (to avoid matching numbers in size names like 3XL)
+                    if span:
+                        search_text = span.get_text(strip=True)
+                        match = re.search(r"(\d+)", search_text)
+                        
+                        if match:
+                            qty = int(match.group(1))
+                            disclosed = True
+                            is_available = qty > 0
+                        else:
+                            qty = 0
+                            disclosed = False
+                            is_available = True
                     else:
-                        # No number found. If label exists and not sold out, it's available but hidden.
+                        # No quantity span found. It's available but exact quantity is hidden.
                         qty = 0
                         disclosed = False
                         is_available = True

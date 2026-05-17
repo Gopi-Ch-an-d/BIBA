@@ -8,6 +8,8 @@ import {
   Area,
   BarChart,
   Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -46,6 +48,12 @@ import {
 } from "../types";
 
 const COLORS = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b"];
+
+const COMPETITOR_COLORS: Record<string, string> = {
+  Aurelia: "#F9AD3D", // Yellow
+  W: "#c0392b", // Red
+  "Global Desi": "#000000", // Black
+};
 
 const containerVariants: Variants = {
   hidden: { opacity: 0 },
@@ -180,7 +188,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
           {product.is_bestseller && (
             <span
               className="absolute top-3 left-3 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest text-white"
-              style={{ backgroundColor: "#c0392b" }}
+              style={{ backgroundColor: "#F9AD3D" }}
             >
               Bestseller
             </span>
@@ -346,6 +354,9 @@ const Overview: React.FC = () => {
     return () => clearInterval(id);
   }, []);
 
+  const [trendType, setTrendType] = useState<"new" | "best">("new");
+  const [detectionType, setDetectionType] = useState<"new" | "best">("new");
+
   const { data: overview = [] } = useQuery<CompetitorOverviewCard[]>({
     queryKey: ["overview"],
     queryFn: competitorService.getOverview,
@@ -354,8 +365,12 @@ const Overview: React.FC = () => {
 
   // ── New Arrivals Trend ──
   const { data: newArrivalsTrend = [] } = useQuery<NewArrivalTrendPoint[]>({
-    queryKey: ["newArrivalsTrend"],
-    queryFn: () => analyticsService.getNewArrivalsTrend({ days: 14 }),
+    queryKey: ["newArrivalsTrend", detectionType],
+    queryFn: () =>
+      analyticsService.getNewArrivalsTrend({
+        days: 14,
+        is_new_launch: detectionType === "new",
+      }),
     refetchInterval: 2000,
   });
 
@@ -395,12 +410,12 @@ const Overview: React.FC = () => {
 
   const trendQueries = useQueries({
     queries: competitors.map((c) => ({
-      queryKey: ["trend", c.id, 7],
+      queryKey: ["trend", c.id, 7, trendType],
       queryFn: () =>
         analyticsService.getPriceTrend({
           competitor_id: c.id,
           days: 7,
-          is_new_launch: true,
+          is_new_launch: trendType === "new",
         }),
       enabled: competitors.length > 0,
     })),
@@ -435,11 +450,17 @@ const Overview: React.FC = () => {
       competitorNames.add(p.competitor_name);
     });
 
+    const fixedOrder = ["W", "Aurelia", "Global Desi"];
+    const names = fixedOrder.filter((name) => competitorNames.has(name));
+    competitorNames.forEach((name) => {
+      if (!fixedOrder.includes(name)) names.push(name);
+    });
+
     return {
       data: Object.values(dataMap).sort((a: any, b: any) =>
         a.date.localeCompare(b.date),
       ),
-      names: Array.from(competitorNames),
+      names,
     };
   }, [newArrivalsTrend]);
 
@@ -493,7 +514,7 @@ const Overview: React.FC = () => {
 
   return (
     <>
-      {/* Playfair Display for BIBA wordmark */}
+      {/* Playfair Display for Aurelia wordmark */}
       <link
         rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap"
@@ -545,7 +566,6 @@ const Overview: React.FC = () => {
               Automated Market Analytics
             </p>
           </div>
-
         </motion.div>
 
         {/* ── Stat Cards ── */}
@@ -563,7 +583,7 @@ const Overview: React.FC = () => {
           />
           <StatCard
             label="Average Price"
-            value={`₹${totals.avgPrice.toLocaleString()}`}
+            value={`${totals.avgPrice.toLocaleString()}`}
             subtext="Market average"
             icon={IndianRupee}
             colorClass="bg-indigo-50 text-indigo-600"
@@ -588,9 +608,35 @@ const Overview: React.FC = () => {
         {/* ── New Arrivals Count Trend ── */}
         <motion.div variants={itemVariants}>
           <div className="bg-white border border-slate-100 rounded-xl p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 mb-5">
-              New Arrivals Detection
-            </p>
+            <div className="flex justify-between items-center mb-5">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">
+                {detectionType === "new"
+                  ? "New Arrivals Detection"
+                  : "Best Sellers Detection"}
+              </p>
+              <div className="flex gap-1 bg-slate-50 p-0.5 rounded-lg border border-slate-100">
+                <button
+                  onClick={() => setDetectionType("new")}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition-all ${
+                    detectionType === "new"
+                      ? "bg-white text-blue-600 shadow-sm border border-slate-100"
+                      : "text-slate-400 hover:text-slate-600"
+                  }`}
+                >
+                  NEW
+                </button>
+                <button
+                  onClick={() => setDetectionType("best")}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition-all ${
+                    detectionType === "best"
+                      ? "bg-white text-emerald-600 shadow-sm border border-slate-100"
+                      : "text-slate-400 hover:text-slate-600"
+                  }`}
+                >
+                  BEST
+                </button>
+              </div>
+            </div>
             <div className="h-56 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
@@ -644,29 +690,24 @@ const Overview: React.FC = () => {
                       paddingBottom: "10px",
                     }}
                   />
-                  {groupedNewArrivalsData.names.map((name) => (
-                    <Bar
-                      key={name}
-                      dataKey={name}
-                      name={name}
-                      radius={[4, 4, 0, 0]}
-                      barSize={32}
-                    >
-                      {groupedNewArrivalsData.data.map((entry, idx) => {
-                        const val = entry[name] || 0;
-                        let barColor = "#3b82f6";
-                        if (val > 500) barColor = "#c0392b";
-                        else if (val >= 100) barColor = "#10b981";
-                        return (
-                          <Cell
-                            key={`cell-${idx}`}
-                            fill={barColor}
-                            fillOpacity={0.8}
-                          />
-                        );
-                      })}
-                    </Bar>
-                  ))}
+                  {groupedNewArrivalsData.names.map((name, idx) => {
+                    const barColor = COMPETITOR_COLORS[name] || "#94a3b8";
+                    return (
+                      <Bar
+                        key={name}
+                        dataKey={name}
+                        name={name}
+                        radius={[4, 4, 0, 0]}
+                        barSize={32}
+                        fill={barColor}
+                        fillOpacity={0.85}
+                        isAnimationActive={true}
+                        animationBegin={idx * 150}
+                        animationDuration={800}
+                        animationEasing="ease-out"
+                      />
+                    );
+                  })}
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -676,158 +717,195 @@ const Overview: React.FC = () => {
         {/* ── Charts Row ── */}
         <motion.div
           variants={itemVariants}
-          className="grid grid-cols-1 gap-4 lg:grid-cols-3"
+          className="grid grid-cols-1 gap-4 lg:grid-cols-2"
         >
           {/* Price Trends */}
           <div className="bg-white border border-slate-100 rounded-xl p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 mb-5">
-              Price Trends
-            </p>
-            <div className="h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart
-                  data={combinedTrends}
-                  margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
+            <div className="flex justify-between items-center mb-5">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">
+                Price Trends
+              </p>
+              <div className="flex gap-1 bg-slate-50 p-0.5 rounded-lg border border-slate-100">
+                <button
+                  onClick={() => setTrendType("new")}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition-all ${
+                    trendType === "new"
+                      ? "bg-white text-blue-600 shadow-sm border border-slate-100"
+                      : "text-slate-400 hover:text-slate-600"
+                  }`}
                 >
-                  <defs>
-                    {competitors.map((c, i) => (
-                      <linearGradient
-                        key={c.id}
-                        id={`grad-${c.name}`}
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="5%"
-                          stopColor={COLORS[i % COLORS.length]}
-                          stopOpacity={0.15}
-                        />
-                        <stop
-                          offset="95%"
-                          stopColor={COLORS[i % COLORS.length]}
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                    ))}
-                  </defs>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    vertical={false}
-                    stroke="#f1f5f9"
-                  />
-                  <XAxis
-                    dataKey="name"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 10, fill: "#94a3b8" }}
-                    dy={8}
-                  />
-                  <YAxis
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 10, fill: "#94a3b8" }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      borderRadius: "10px",
-                      border: "none",
-                      boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
-                      fontSize: 11,
-                    }}
-                  />
-                  <Legend
-                    iconType="circle"
-                    verticalAlign="top"
-                    wrapperStyle={{ fontSize: 10, paddingBottom: 16 }}
-                  />
-                  {competitors.map((c, i) => (
-                    <Area
-                      key={c.id}
-                      type="monotone"
-                      dataKey={c.name}
-                      stroke={COLORS[i % COLORS.length]}
-                      strokeWidth={2}
-                      fillOpacity={1}
-                      fill={`url(#grad-${c.name})`}
-                    />
-                  ))}
-                </AreaChart>
-              </ResponsiveContainer>
+                  NEW
+                </button>
+                <button
+                  onClick={() => setTrendType("best")}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition-all ${
+                    trendType === "best"
+                      ? "bg-white text-emerald-600 shadow-sm border border-slate-100"
+                      : "text-slate-400 hover:text-slate-600"
+                  }`}
+                >
+                  BEST
+                </button>
+              </div>
+            </div>
+            <div className="h-56">
+              {combinedTrends.length > 0 && (
+                <motion.div
+                  className="w-full h-full"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.8, ease: "easeOut" }}
+                >
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart
+                      data={combinedTrends}
+                      margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
+                    >
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        vertical={false}
+                        stroke="#f1f5f9"
+                      />
+                      <XAxis
+                        dataKey="name"
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fontSize: 10, fill: "#94a3b8" }}
+                        dy={8}
+                      />
+                      <YAxis
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fontSize: 10, fill: "#94a3b8" }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          borderRadius: "10px",
+                          border: "none",
+                          boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+                          fontSize: 11,
+                        }}
+                      />
+                      <Legend
+                        iconType="circle"
+                        verticalAlign="top"
+                        wrapperStyle={{ fontSize: 10, paddingBottom: 16 }}
+                      />
+                      {competitors.map((c, i) => {
+                        const color =
+                          COMPETITOR_COLORS[c.name] ||
+                          COLORS[i % COLORS.length];
+                        return (
+                          <Line
+                            key={c.id}
+                            type="monotone"
+                            dataKey={c.name}
+                            stroke={color}
+                            strokeWidth={2}
+                            dot={{ r: 4 }}
+                            activeDot={{ r: 6 }}
+                            isAnimationActive={true}
+                            animationBegin={i * 200}
+                            animationDuration={1000}
+                            animationEasing="ease-out"
+                          />
+                        );
+                      })}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </motion.div>
+              )}
             </div>
           </div>
 
-          {/* Bestseller Share */}
+          {/* ── Bestseller Share ── */}
           <div className="bg-white border border-slate-100 rounded-xl p-5">
             <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 mb-5">
               Bestseller Share
             </p>
+
+            {/*
+              The Pie cx="40%" shifts the donut left to make room for the
+              legend on the right. The centre-label overlay must match that
+              offset, so we use a flex container that fills the chart area and
+              apply a right-side padding equal to the legend width (~30% of the
+              container) to push the text back into the donut hole.
+            */}
             <div className="h-56 relative">
-              <ResponsiveContainer width="100%" height="100%">
-                <RePieChart>
-                  <Pie
-                    data={distribution}
-                    cx="40%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={6}
-                    dataKey="value"
-                    stroke="none"
-                  >
-                    {distribution.map((_, i) => (
-                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend
-                    layout="vertical"
-                    verticalAlign="middle"
-                    align="right"
-                    iconType="circle"
-                    wrapperStyle={{ fontSize: 10, paddingLeft: 16 }}
-                  />
-                </RePieChart>
-              </ResponsiveContainer>
-              <div className="absolute top-1/2 left-[40%] -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest">
+              {distribution.length > 0 && (
+                <motion.div
+                  className="w-full h-full"
+                  initial={{ scale: 0, opacity: 0, rotate: -360 }}
+                  animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                  transition={{ duration: 1, ease: "easeOut" }}
+                >
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RePieChart>
+                      <Pie
+                        data={distribution}
+                        cx="40%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={6}
+                        dataKey="value"
+                        stroke="none"
+                        isAnimationActive={true}
+                        animationBegin={0}
+                        animationDuration={900}
+                        animationEasing="ease-out"
+                      >
+                        {distribution.map((entry, i) => (
+                          <Cell
+                            key={i}
+                            fill={
+                              COMPETITOR_COLORS[entry.name] ||
+                              COLORS[i % COLORS.length]
+                            }
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        position={{ x: 0, y: 0 }}
+                        contentStyle={{
+                          backgroundColor: "#fff",
+                          border: "1px solid #e2e8f0",
+                          borderRadius: "8px",
+                          boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                          fontSize: "12px",
+                          fontWeight: "bold",
+                        }}
+                      />
+                      <Legend
+                        layout="vertical"
+                        verticalAlign="middle"
+                        align="right"
+                        iconType="circle"
+                        wrapperStyle={{ fontSize: 10, paddingLeft: 16 }}
+                        formatter={(value) => {
+                          const item = distribution.find(
+                            (d) => d.name === value,
+                          );
+                          return `${value} (${item ? item.value : 0})`;
+                        }}
+                      />
+                    </RePieChart>
+                  </ResponsiveContainer>
+                </motion.div>
+              )}
+
+              {/* Centre label — aligned with cx="40%" by padding the right ~30% */}
+              <div
+                className="absolute inset-y-0 flex flex-col items-center justify-center text-center pointer-events-none"
+                style={{ left: "40%", transform: "translateX(-120%)" }}
+              >
+                <p className="text-[10px] text-slate-400 uppercase tracking-widest leading-none mb-1">
                   Total
                 </p>
-                <p className="text-xl font-bold text-slate-900">
+                <p className="text-xl font-bold text-slate-900 leading-none">
                   {totalBestsellers.toLocaleString()}
                 </p>
               </div>
-            </div>
-          </div>
-
-          {/* Top Competitors */}
-          <div className="bg-white border border-slate-100 rounded-xl p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 mb-5">
-              Top Competitors
-            </p>
-            <div className="flex flex-col gap-4">
-              {overview.slice(0, 4).map((c, i) => (
-                <div key={i}>
-                  <div className="flex justify-between text-[12px] mb-1.5">
-                    <span className="text-slate-600 font-medium">
-                      {c.competitor_name}
-                    </span>
-                    <span className="text-slate-400">
-                      {c.bestsellers_count} items
-                    </span>
-                  </div>
-                  <div className="h-1.5 w-full bg-slate-100 rounded-full">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${(c.bestsellers_count / totalBestsellers) * 100}%`,
-                        backgroundColor: COLORS[i % COLORS.length],
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
         </motion.div>
@@ -853,7 +931,13 @@ const Overview: React.FC = () => {
                 <col style={{ width: "48px" }} />
               </colgroup>
               <thead>
-                <tr className="border-b border-slate-100">
+                <tr
+                  className="border-b"
+                  style={{
+                    backgroundColor: "rgba(192, 57, 43, 0.06)",
+                    borderBottomColor: "rgba(192, 57, 43, 0.12)",
+                  }}
+                >
                   {[
                     "Image",
                     "Product",
@@ -864,7 +948,8 @@ const Overview: React.FC = () => {
                   ].map((h) => (
                     <th
                       key={h}
-                      className="px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-slate-400"
+                      className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest"
+                      style={{ color: "#c0392b" }}
                     >
                       {h}
                     </th>
@@ -875,7 +960,8 @@ const Overview: React.FC = () => {
                 {productsData?.products?.map((p) => (
                   <tr
                     key={p.id}
-                    className="hover:bg-slate-50 transition-colors group"
+                    className="hover:bg-slate-50 transition-colors group cursor-pointer"
+                    onClick={() => setSelectedProduct(p)}
                   >
                     {/* Image */}
                     <td className="px-4 py-3">
@@ -908,7 +994,7 @@ const Overview: React.FC = () => {
                     {/* Price */}
                     <td className="px-4 py-3">
                       <p className="text-sm font-semibold text-slate-900 whitespace-nowrap">
-                        ₹{p.current_price?.toLocaleString()}
+                        {p.current_price?.toLocaleString()}
                       </p>
                       {p.discount_pct > 0 && (
                         <p className="text-[10px] text-rose-500 whitespace-nowrap">

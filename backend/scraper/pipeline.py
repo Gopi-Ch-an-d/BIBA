@@ -169,7 +169,7 @@ def _record_unified_history(session: Session, product, competitor_id: int, sourc
     last_record = session.execute(
         select(PriceHistory)
         .where(
-            PriceHistory.product_id == product.record_id,
+            PriceHistory.sku == product.sku,
             PriceHistory.source == source
         )
         .order_by(desc(PriceHistory.scraped_at))
@@ -196,7 +196,7 @@ def _record_unified_history(session: Session, product, competitor_id: int, sourc
     session.add(snapshot)
 
 
-def run_scrape_for_competitor(competitor_name: str, db_session: Session) -> dict:
+def run_scrape_for_competitor(competitor_name: str, db_session: Session, category_name: str = None) -> dict:
     """
     Main entry point. Runs a full scrape cycle for one competitor:
       1. Load active category URLs from DB
@@ -240,6 +240,9 @@ def run_scrape_for_competitor(competitor_name: str, db_session: Session) -> dict
                 Category.is_active == True
             )
         ).scalars().all()
+
+        if category_name:
+            categories = [c for c in categories if c.name == category_name]
 
         cat_urls = [{"name": c.name, "url": c.url} for c in categories]
 

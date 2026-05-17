@@ -9,24 +9,26 @@ from typing import Optional
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from db.database import get_db
 from db.models import (
     Competitor, BestsellerProduct, NewArrivalProduct, 
-    PriceHistory, ScrapeLog, User, Category, ProductSize
+    PriceHistory, ScrapeLog, User, Role, Category, ProductSize, Employee
 )
 from api.auth import create_access_token, verify_password, get_current_user
 from api.schemas import (
-    CompetitorCreate, CompetitorOut,
+    CompetitorCreate, CompetitorOut, CompetitorUpdate,
     ProductOut, ProductListResponse,
     PriceHistoryPoint, NewArrivalTrendPoint,
     CompetitorOverviewCard,
     ScrapeLogOut,
     TriggerScrapeResponse,
-    Token, LoginRequest
+    Token, LoginRequest,
+    RoleCreate, RoleOut, UserCreate, UserOut, UserUpdate,
+    EmployeeCreate, EmployeeOut, EmployeeUpdate
 )
 
 logger = logging.getLogger(__name__)
@@ -95,6 +97,161 @@ async def create_competitor(payload: CompetitorCreate, db: AsyncSession = Depend
     await db.flush()
     await db.refresh(competitor)
     return competitor
+
+@router.put("/competitors/{competitor_id}", response_model=CompetitorOut, tags=["Competitors"])
+async def update_competitor(competitor_id: int, payload: CompetitorUpdate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Competitor).where(Competitor.record_id == competitor_id))
+    competitor = result.scalar_one_or_none()
+    if not competitor:
+        raise HTTPException(status_code=404, detail="Competitor not found")
+
+    data = payload.model_dump(exclude_unset=True)
+    categories_data = data.pop("categories", None)
+
+    for key, value in data.items():
+        setattr(competitor, key, value)
+
+    if categories_data is not None:
+        # Delete old categories
+        await db.execute(delete(Category).where(Category.competitor_id == competitor_id))
+        
+        # Add new categories
+        for cat_data in categories_data:
+            cat_dict = cat_data.model_dump() if hasattr(cat_data, "model_dump") else cat_data
+            if not cat_dict.get("slug"):
+                cat_dict["slug"] = cat_dict["name"].lower().replace(" ", "_")
+            category = Category(competitor_id=competitor_id, **cat_dict)
+            db.add(category)
+
+    await db.commit()
+    await db.refresh(competitor)
+    return competitor
+
+@router.delete("/competitors/{competitor_id}", tags=["Competitors"])
+async def delete_competitor(competitor_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Competitor).where(Competitor.record_id == competitor_id))
+    competitor = result.scalar_one_or_none()
+    if not competitor:
+        raise HTTPException(status_code=404, detail="Competitor not found")
+
+    competitor.is_deleted = True
+    await db.commit()
+    return {"message": "Competitor deleted successfully"}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  ROLES & USERS
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/roles", response_model=list[RoleOut], tags=["Roles"])
+async def list_roles(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Role).where(Role.is_deleted == False))
+    return result.scalars().all()
+
+@router.post("/roles", response_model=RoleOut, tags=["Roles"])
+async def create_role(payload: RoleCreate, db: AsyncSession = Depends(get_db)):
+    role = Role(**payload.model_dump())
+    db.add(role)
+    await db.commit()
+    await db.refresh(role)
+    return role
+
+@router.get("/users", response_model=list[UserOut], tags=["Users"])
+async def list_users(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.is_deleted == False))
+    return result.scalars().all()
+
+@router.post("/users", response_model=UserOut, tags=["Users"])
+async def create_user(payload: UserCreate, db: AsyncSession = Depends(get_db)):
+    existing = await db.execute(select(User).where(User.email == payload.email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    password_hash = f"hashed_{payload.password}" # Placeholder
+    
+    user = User(
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        email=payload.email,
+        password_hash=password_hash,
+        role_id=payload.role_id
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+@router.put("/users/{user_id}", response_model=UserOut, tags=["Users"])
+async def update_user(user_id: int, payload: UserUpdate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.record_id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    data = payload.model_dump(exclude_unset=True)
+    for key, value in data.items():
+        setattr(user, key, value)
+        
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+@router.delete("/users/{user_id}", tags=["Users"])
+async def delete_user(user_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.record_id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    user.is_deleted = True
+    await db.commit()
+    return {"message": "User deleted successfully"}
+
+
+# ── Employees ──────────────────────────────────────────────────────────────
+
+@router.get("/employees", response_model=list[EmployeeOut], tags=["Employees"])
+async def list_employees(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Employee).where(Employee.is_deleted == False))
+    return result.scalars().all()
+
+@router.post("/employees", response_model=EmployeeOut, tags=["Employees"])
+async def create_employee(payload: EmployeeCreate, db: AsyncSession = Depends(get_db)):
+    existing = await db.execute(select(Employee).where(Employee.employee_code == payload.employee_code))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Employee code already exists")
+        
+    employee = Employee(**payload.model_dump())
+    db.add(employee)
+    await db.commit()
+    await db.refresh(employee)
+    return employee
+
+@router.put("/employees/{employee_id}", response_model=EmployeeOut, tags=["Employees"])
+async def update_employee(employee_id: int, payload: EmployeeUpdate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Employee).where(Employee.record_id == employee_id))
+    employee = result.scalar_one_or_none()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+        
+    data = payload.model_dump(exclude_unset=True)
+    for key, value in data.items():
+        setattr(employee, key, value)
+        
+    await db.commit()
+    await db.refresh(employee)
+    return employee
+
+@router.delete("/employees/{employee_id}", tags=["Employees"])
+async def delete_employee(employee_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Employee).where(Employee.record_id == employee_id))
+    employee = result.scalar_one_or_none()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+        
+    employee.is_deleted = True
+    await db.commit()
+    return {"message": "Employee deleted successfully"}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -388,26 +545,29 @@ async def price_trend(
 async def new_arrivals_trend(
     competitor_id: Optional[int] = Query(None),
     days: int = Query(30, ge=7, le=90),
+    is_new_launch: bool = Query(True),
     db: AsyncSession = Depends(get_db),
 ):
     """Daily count of truly NEW products detected over the last N days."""
     cutoff = datetime.utcnow() - timedelta(days=days)
     
+    ProdModel = NewArrivalProduct if is_new_launch else BestsellerProduct
+    
     q = (
         select(
-            func.date(NewArrivalProduct.first_seen_at).label("date"),
+            func.date(ProdModel.first_seen_at).label("date"),
             Competitor.name.label("competitor_name"),
-            func.count(NewArrivalProduct.record_id).label("count")
+            func.count(ProdModel.record_id).label("count")
         )
-        .join(Competitor, NewArrivalProduct.competitor_id == Competitor.record_id)
+        .join(Competitor, ProdModel.competitor_id == Competitor.record_id)
         .where(
-            NewArrivalProduct.first_seen_at >= cutoff,
-            NewArrivalProduct.is_deleted == False
+            ProdModel.first_seen_at >= cutoff,
+            ProdModel.is_deleted == False
         )
     )
     
     if competitor_id:
-        q = q.where(NewArrivalProduct.competitor_id == competitor_id)
+        q = q.where(ProdModel.competitor_id == competitor_id)
         
     q = q.group_by("date", "competitor_name").order_by("date")
     
@@ -492,23 +652,34 @@ async def export_excel(
 ):
     """Generates an Excel file containing product data based on filters."""
     # Logic to fetch products
-    model = NewArrivalProduct if is_new_launch is True else BestsellerProduct
-    
-    q = select(
-        model, 
-        Competitor.name.label("competitor_name"),
-        Category.name.label("cat_name")
-    ).join(Competitor, model.competitor_id == Competitor.record_id)\
-     .outerjoin(Category, model.category_id == Category.record_id)
-    if competitor_id:
-        q = q.where(model.competitor_id == competitor_id)
-    
-    results = (await db.execute(q)).all()
+    if is_new_launch is None:
+        # Query both
+        q_best = select(BestsellerProduct, Competitor.name.label("competitor_name"), Category.name.label("cat_name")).join(Competitor, BestsellerProduct.competitor_id == Competitor.record_id).outerjoin(Category, BestsellerProduct.category_id == Category.record_id)
+        q_new = select(NewArrivalProduct, Competitor.name.label("competitor_name"), Category.name.label("cat_name")).join(Competitor, NewArrivalProduct.competitor_id == Competitor.record_id).outerjoin(Category, NewArrivalProduct.category_id == Category.record_id)
+        
+        if competitor_id:
+            q_best = q_best.where(BestsellerProduct.competitor_id == competitor_id)
+            q_new = q_new.where(NewArrivalProduct.competitor_id == competitor_id)
+            
+        results_best = (await db.execute(q_best)).all()
+        results_new = (await db.execute(q_new)).all()
+        
+        results = [(r, "Best Seller") for r in results_best] + [(r, "New Arrival") for r in results_new]
+    else:
+        model = NewArrivalProduct if is_new_launch is True else BestsellerProduct
+        q = select(model, Competitor.name.label("competitor_name"), Category.name.label("cat_name")).join(Competitor, model.competitor_id == Competitor.record_id).outerjoin(Category, model.category_id == Category.record_id)
+        
+        if competitor_id:
+            q = q.where(model.competitor_id == competitor_id)
+            
+        results_raw = (await db.execute(q)).all()
+        results = [(r, "New Arrival" if is_new_launch else "Best Seller") for r in results_raw]
     
     data = []
-    for row in results:
+    for row, segment in results:
         p = row[0]
         data.append({
+            "Segment": segment,
             "Competitor": row[1],
             "SKU": p.sku,
             "Name": p.name,

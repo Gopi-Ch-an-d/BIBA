@@ -7,7 +7,13 @@ import {
   ModuleRegistry,
   AllCommunityModule,
 } from "ag-grid-community";
-import { Download, Award, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Download,
+  Award,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+} from "lucide-react";
 import { productService, competitorService } from "../services/api";
 import { Product, Competitor } from "../types";
 import { ProductDetailView } from "../components/ProductDetailView";
@@ -17,7 +23,7 @@ import GooeyLoader from "../components/GooeyLoader";
 const fadeInUp = {
   initial: { opacity: 0, y: 15 },
   animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.4, ease: "easeOut" }
+  transition: { duration: 0.4, ease: "easeOut" },
 };
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -29,6 +35,7 @@ const Bestsellers: React.FC = () => {
   const [competitorId, setCompetitorId] = useState<number | undefined>(
     undefined,
   );
+  const [date, setDate] = useState<string>("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   const { data: competitors = [] } = useQuery<Competitor[]>({
@@ -37,50 +44,89 @@ const Bestsellers: React.FC = () => {
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ["products-bs", page, competitorId, PAGE_SIZE],
+    queryKey: ["products-bs", page, competitorId, date, PAGE_SIZE],
     queryFn: () =>
       productService.listProducts({
         page: page,
         page_size: PAGE_SIZE,
         competitor_id: competitorId,
+        date: date || undefined,
         is_bestseller: true,
       }),
+    refetchInterval: 2000,
   });
 
   const columnDefs: ColDef<Product>[] = [
     {
-      headerName: "Rank",
+      headerName: "P.No",
       valueGetter: (params) =>
         (params.node?.rowIndex ?? 0) + 1 + (page - 1) * PAGE_SIZE,
-      width: 80,
+      width: 70,
       cellClass: "font-black text-slate-400",
     },
     {
-      headerName: "Product",
-      field: "name",
-      flex: 1,
-      minWidth: 250,
-      maxWidth: 480,
+      headerName: "Image",
+      field: "image_url",
+      width: 80,
       cellRenderer: (params: any) => (
-        <button
-          onClick={() => setSelectedProduct(params.data)}
-          className="flex items-center gap-4 h-full text-left w-full hover:bg-slate-50 transition-colors cursor-pointer"
-        >
+        <div className="flex items-center justify-center h-full">
           <img
-            src={params.data.image_url}
+            src={params.value}
             alt=""
-            className="h-12 w-10 rounded-lg object-cover shadow-sm border border-slate-100"
+            className="h-10 w-8 rounded-md object-cover shadow-sm border border-slate-100"
           />
-          <span className="font-bold text-slate-800 line-clamp-1">
-            {params.value}
-          </span>
-        </button>
+        </div>
       ),
     },
     {
+      headerName: "Product Name",
+      field: "name",
+      flex: 1,
+      minWidth: 200,
+      cellRenderer: (params: any) => (
+        <button
+          onClick={() => setSelectedProduct(params.data)}
+          className="font-bold text-slate-800 hover:text-slate-600 transition-colors cursor-pointer text-left h-full flex items-center"
+        >
+          <span className="line-clamp-1">{params.value}</span>
+        </button>
+      ),
+    },
+
+    {
+      headerName: "Status",
+      width: 120,
+      cellRenderer: (params: any) => {
+        const isNew = params.data?.is_new_launch;
+        const isBs = params.data?.is_bestseller;
+
+        return (
+          <div className="flex items-center gap-1 h-full">
+            {isNew && (
+              <span
+                className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest shadow-sm"
+                style={{ backgroundColor: "#e74c3c", color: "#fff" }}
+              >
+                New
+              </span>
+            )}
+            {isBs && (
+              <span
+                className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest shadow-sm"
+                style={{ backgroundColor: "#e74c3c", color: "#fff" }}
+              >
+                Best Seller
+              </span>
+            )}
+          </div>
+        );
+      },
+    },
+
+    {
       headerName: "Competitor",
       field: "competitor_id",
-      width: 150,
+      width: 130,
       valueGetter: (params) => {
         const comp = competitors.find(
           (c) => c.id === params.data?.competitor_id,
@@ -88,38 +134,45 @@ const Bestsellers: React.FC = () => {
         return comp?.name || "Unknown";
       },
       cellRenderer: (params: any) => (
-        <span
-          className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest"
-          style={{
-            backgroundColor: "rgba(192,57,43,0.08)",
-            color: "#c0392b",
-            border: "1px solid rgba(192,57,43,0.15)",
-          }}
-        >
-          {params.value}
-        </span>
+        <div className="flex items-center h-full">
+          <span
+            className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest"
+            style={{
+              backgroundColor: "rgba(192,57,43,0.08)",
+              color: "#c0392b",
+              border: "1px solid rgba(192,57,43,0.15)",
+            }}
+          >
+            {params.value}
+          </span>
+        </div>
       ),
     },
+
     {
-      headerName: "Current Price",
+      headerName: "Price",
       field: "current_price",
-      width: 150,
+      width: 120,
       valueFormatter: (params) =>
-        params.value ? `₹${params.value.toLocaleString()}` : "—",
+        params.value ? `Rs.${params.value.toLocaleString()}` : "—",
       cellClass: "font-black text-slate-900",
     },
     {
       headerName: "Is Active",
       field: "is_active",
-      width: 110,
+      width: 100,
       cellRenderer: (params: any) => (
         <div className="flex items-center h-full">
           <span
-            className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border shadow-sm"
-            style={{ 
-              color: params.value ? "#10b981" : "#94a3b8", 
-              backgroundColor: params.value ? "rgba(16, 185, 129, 0.08)" : "rgba(148, 163, 184, 0.08)",
-              borderColor: params.value ? "rgba(16, 185, 129, 0.15)" : "rgba(148, 163, 184, 0.15)"
+            className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest border shadow-sm"
+            style={{
+              color: params.value ? "#10b981" : "#94a3b8",
+              backgroundColor: params.value
+                ? "rgba(16, 185, 129, 0.08)"
+                : "rgba(148, 163, 184, 0.08)",
+              borderColor: params.value
+                ? "rgba(16, 185, 129, 0.15)"
+                : "rgba(148, 163, 184, 0.15)",
             }}
           >
             {params.value ? "Yes" : "No"}
@@ -128,12 +181,21 @@ const Bestsellers: React.FC = () => {
       ),
     },
     {
-      headerName: "Discount",
-      field: "discount_pct",
-      width: 110,
-      valueFormatter: (params) =>
-        params.value ? `${Math.round(params.value)}% OFF` : "—",
-      cellClass: "text-rose-500 font-black",
+      headerName: "View",
+      width: 80,
+      cellRenderer: (params: any) => (
+        <div className="flex items-center justify-center h-full">
+          <a
+            href={params.data?.product_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-1.5 rounded-lg bg-white text-slate-500 border border-slate-200 hover:bg-slate-50 hover:text-slate-700 transition-colors shadow-sm flex items-center justify-center"
+            title="View Product"
+          >
+            <ExternalLink size={14} />
+          </a>
+        </div>
+      ),
     },
   ];
 
@@ -143,8 +205,8 @@ const Bestsellers: React.FC = () => {
       sortable: true,
       filter: false,
     },
-    rowHeight: 64,
-    headerHeight: 48,
+    rowHeight: 52,
+    headerHeight: 40,
   };
 
   const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0;
@@ -177,6 +239,7 @@ const Bestsellers: React.FC = () => {
             exit={{ opacity: 0 }}
             className="flex flex-col gap-6 h-full pb-8"
           >
+            {/* Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div
@@ -190,7 +253,7 @@ const Bestsellers: React.FC = () => {
                 </div>
                 <div>
                   <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-                    Bestseller Analysis
+                    Bestseller 
                   </h1>
                   <p className="text-xs font-medium text-slate-400 mt-1 uppercase tracking-widest">
                     Tracking high-velocity items across tracked brands
@@ -199,6 +262,16 @@ const Bestsellers: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-3">
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => {
+                    setDate(e.target.value);
+                    setPage(1);
+                  }}
+                  className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 transition-all cursor-pointer shadow-sm"
+                  style={{ ["--tw-ring-color" as any]: "rgba(192,57,43,0.1)" }}
+                />
                 <select
                   value={competitorId || ""}
                   onChange={(e) => {
@@ -207,7 +280,7 @@ const Bestsellers: React.FC = () => {
                     );
                     setPage(1);
                   }}
-                  className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 transition-all cursor-pointer min-w-[200px] shadow-sm"
+                  className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 transition-all cursor-pointer min-w-[150px] shadow-sm"
                   style={{ ["--tw-ring-color" as any]: "rgba(192,57,43,0.1)" }}
                 >
                   <option value="">All Competitors</option>
@@ -223,21 +296,28 @@ const Bestsellers: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex-1 bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden flex flex-col ag-theme-quartz bs-grid relative">
+            {/* Grid — fixed height matching NewArrivals pattern */}
+            <div
+              className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden ag-theme-quartz bs-grid relative"
+              style={{ height: "calc(100vh - 240px)", minHeight: "500px" }}
+            >
               {isLoading && (
                 <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-10 flex items-center justify-center">
                   <GooeyLoader size="sm" />
                 </div>
               )}
-              <AgGridReact
-                theme="legacy"
-                loading={isLoading}
-                rowData={data?.products || []}
-                columnDefs={columnDefs}
-                gridOptions={gridOptions}
-              />
+              <div style={{ height: "100%", width: "100%" }}>
+                <AgGridReact
+                  theme="legacy"
+                  loading={isLoading}
+                  rowData={data?.products || []}
+                  columnDefs={columnDefs}
+                  gridOptions={gridOptions}
+                />
+              </div>
             </div>
 
+            {/* Pagination */}
             <div className="flex items-center justify-between px-8 py-4 bg-white border border-slate-100 rounded-2xl shadow-sm">
               <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
                 Total Bestsellers:{" "}
@@ -272,6 +352,7 @@ const Bestsellers: React.FC = () => {
               .bs-grid .ag-root-wrapper {
                 border: none !important;
                 border-radius: 24px !important;
+                height: 100% !important;
               }
               .bs-grid .ag-header {
                 background-color: rgba(192, 57, 43, 0.06) !important;

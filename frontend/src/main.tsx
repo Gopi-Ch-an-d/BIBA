@@ -23,6 +23,9 @@ import Exports from "./pages/Exports";
 import ScrapeLogs from "./pages/ScrapeLogs";
 import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
+import Users from "./pages/Users";
+import Roles from "./pages/Roles";
+import Employees from "./pages/Employees";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -65,6 +68,9 @@ function Layout() {
           <Route path="/trends" element={<ProtectedRoute><Trends /></ProtectedRoute>} />
           <Route path="/exports" element={<ProtectedRoute><Exports /></ProtectedRoute>} />
           <Route path="/scrape-monitor" element={<ProtectedRoute><ScrapeLogs /></ProtectedRoute>} />
+          <Route path="/master/users" element={<ProtectedRoute><Users /></ProtectedRoute>} />
+          <Route path="/master/roles" element={<ProtectedRoute><Roles /></ProtectedRoute>} />
+          <Route path="/master/employees" element={<ProtectedRoute><Employees /></ProtectedRoute>} />
         </Routes>
       </main>
     </div>

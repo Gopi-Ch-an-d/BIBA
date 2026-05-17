@@ -622,13 +622,22 @@ class AureliaScraper(BaseScraper):
     """
     COMPETITOR_NAME = "Aurelia"
 
-    def _parse_product_card(self, card, category_name: str = "apparel") -> Optional[RawProduct]:
+    def _parse_product_card(self, card, category_name: str = "apparel", processed_skus: set = None) -> Optional[RawProduct]:
         import re
         try:
             # ── Product URL & SKU ──────────────────────────────────────────────
             url_el = card.find_element(By.CSS_SELECTOR, "a.product-title, a.card-title, a")
             product_url = url_el.get_attribute("href")
-            sku = product_url.split("/products/")[-1].split("?")[0] if "/products/" in product_url else product_url
+            
+            # Filter out non-product links (like social media or footer links)
+            if not product_url or "/products/" not in product_url:
+                return None
+                
+            sku = product_url.split("/products/")[-1].split("?")[0]
+            
+            # Optimization: Skip PDP fetch for products already processed in this session
+            if processed_skus is not None and sku in processed_skus:
+                return None
 
             # ── Product Name ───────────────────────────────────────────────────
             name = safe_text(card, ".card-information__text, h3, .h4")
@@ -660,8 +669,40 @@ class AureliaScraper(BaseScraper):
 
             # ── Image ──────────────────────────────────────────────────────────
             try:
-                img_el = card.find_element(By.CSS_SELECTOR, ".card__media img, img")
-                img_url = img_el.get_attribute("src") or img_el.get_attribute("data-src") or ""
+                # Try to find images inside slideshow or standard media container
+                img_els = card.find_elements(By.CSS_SELECTOR, ".product-image-slideshow img, .card__media img, img")
+                img_url = ""
+                
+                if img_els:
+                    # Prefer the active one or the first one
+                    target_img = None
+                    for el in img_els:
+                        cls = el.get_attribute("class") or ""
+                        if "active" in cls or "homePageImage" in cls:
+                            target_img = el
+                            break
+                    
+                    if not target_img:
+                        target_img = img_els[0]
+                        
+                    # Try data-src first for lazy-loaded images
+                    img_url = target_img.get_attribute("data-src") or target_img.get_attribute("src") or ""
+                    
+                    # If it's a placeholder (data:image...), try to get from srcset or parent picture
+                    if img_url.startswith("data:image"):
+                        srcset = target_img.get_attribute("data-srcset") or target_img.get_attribute("srcset")
+                        
+                        # Try to find a source tag in case of <picture> element
+                        if not srcset:
+                            try:
+                                source_el = card.find_element(By.CSS_SELECTOR, "picture source")
+                                srcset = source_el.get_attribute("data-srcset") or source_el.get_attribute("srcset")
+                            except Exception:
+                                pass
+                                
+                        if srcset:
+                            img_url = srcset.split(",")[0].split(" ")[0]
+                            
                 if img_url.startswith("//"): img_url = "https:" + img_url
             except Exception:
                 img_url = ""
@@ -670,85 +711,115 @@ class AureliaScraper(BaseScraper):
             stock_available = "sold out" not in card.text.lower()
             is_bestseller = "bestseller" in card.text.lower()
 
+            # ── UPDATED SIZE + STOCK LOGIC (PDP FETCH) ─────────────────────
+            sizes = {}
+            if product_url:
+                try:
+                    # Small delay to avoid rate limiting
+                    time.sleep(random.uniform(2.0, 5.0))
+                    sizes = extract_size_quantities(product_url)
+                except Exception as e:
+                    logger.debug(f"[Aurelia] PDP size fetch error for {sku}: {e}")
+
+            # Fallback if no sizes were extracted
+            if not sizes:
+                sizes = {
+                    "ALL": {
+                        "quantity": 0,
+                        "is_available": stock_available,
+                        "disclosed": False
+                    }
+                }
+
             return RawProduct(
                 sku=sku, name=name, category=category_name,
                 current_price=current_price, original_price=original_price,
                 discount_pct=discount_pct, stock_available=stock_available,
                 is_bestseller=is_bestseller, image_url=img_url, product_url=product_url,
+                sizes=sizes,
             )
         except Exception as e:
             logger.debug(f"[Aurelia] Card parse error: {e}")
             return None
 
     def _handle_pagination(self, url: str, cat_name: str = "apparel") -> list[RawProduct]:
-        """Handle 'Show More' style pagination for Aurelia."""
+        """Handle pagination for Aurelia using ?page=N URLs."""
         is_bs_url = "bestseller" in url.lower() or "bestseller" in cat_name.lower()
-        # Wait for initial load - Verified from CSS
-        try:
-            self.wait.until(EC.presence_of_element_located((
-                By.CSS_SELECTOR, 
-                ".product-grid, .grid, .card-wrapper"
-            )))
-        except Exception:
-            logger.warning("[Aurelia] Initial grid not found with CSS selectors")
-            return []
-
-        # Keep pagination up to 5 pages
-        # Pagination - keep going as long as Show More is present
-        page_attempt = 1
-        while True:
-            try:
-                show_more = self.driver.find_element(By.ID, "ShowMoreBtn")
-                if not show_more.is_displayed():
-                    break
-                
-                logger.info(f"[Aurelia] Clicking Show More (Attempt {page_attempt})...")
-                self.driver.execute_script("arguments[0].scrollIntoView();", show_more)
-                human_delay(1, 2)
-                show_more.click()
-                human_delay(3, 5) # Wait for new items to load
-                page_attempt += 1
-            except Exception as e:
-                logger.info(f"[Aurelia] Pagination end: {e}")
-                if "session id" in str(e).lower() or "connection" in str(e).lower():
-                    raise e
-                break
-
-        # Final grab of all cards - Verified .card-wrapper from CSS
-        cards = self.driver.find_elements(
-            By.CSS_SELECTOR, 
-            ".card-wrapper, .grid__item"
-        )
-        logger.info(f"[Aurelia] Total products found: {len(cards)}")
+        is_new_url = "new" in url.lower() or "new" in cat_name.lower() or "fresh" in url.lower()
         
         products = []
-        is_new_url = "new" in url.lower()
-        for card in cards:
-            parsed = self._parse_product_card(card, category_name=cat_name)
-            if parsed and parsed.name:
-                if is_bs_url: parsed.is_bestseller = True
-                if is_new_url: parsed.is_new_launch = True
-                products.append(parsed)
-                if self.callback:
-                    self.callback(parsed)
+        seen_skus = set()
+        page_attempt = 1
+        max_pages = 10
+        
+        while page_attempt <= max_pages:
+            sep = "&" if "?" in url else "?"
+            page_url = f"{url}{sep}page={page_attempt}"
+            logger.info(f"[Aurelia] Loading Page {page_attempt} via URL: {page_url}")
+            self.driver.get(page_url)
+            human_delay(2, 4)
+            
+            # Wait for grid
+            try:
+                self.wait.until(EC.presence_of_element_located((
+                    By.CSS_SELECTOR, "#product-grid, .card-wrapper"
+                )))
+            except Exception:
+                logger.warning(f"[Aurelia] Grid not found on page {page_attempt}")
+                break
                 
+            cards = self.driver.find_elements(By.CSS_SELECTOR, "#product-grid > *, .card-wrapper, .grid__item")
+            if not cards:
+                logger.info(f"[Aurelia] No cards found on page {page_attempt}. Stopping.")
+                break
+                
+            new_on_page = 0
+            for card in cards:
+                parsed = self._parse_product_card(card, category_name=cat_name, processed_skus=seen_skus)
+                if parsed and parsed.name and parsed.sku:
+                    if parsed.sku in seen_skus:
+                        continue
+                    seen_skus.add(parsed.sku)
+                    products.append(parsed)
+                    new_on_page += 1
+                    
+                    if is_bs_url: parsed.is_bestseller = True
+                    if is_new_url: parsed.is_new_launch = True
+                    
+                    if self.callback:
+                        self.callback(parsed)
+                        
+            logger.info(f"[Aurelia] Page {page_attempt}: Found {len(cards)} cards, processed {new_on_page} new.")
+            
+            if new_on_page == 0:
+                logger.info(f"[Aurelia] No new products on page {page_attempt}. Stopping.")
+                break
+                
+            page_attempt += 1
+            
+        logger.info(f"[Aurelia] Finished scrape. Total products: {len(products)}")
         return products
 
 
 class GlobalDesiScraper(BaseScraper):
     """
     Scraper for Global Desi (global-desi.com).
+    Updated with correct selectors and load-more pagination.
     """
     COMPETITOR_NAME = "Global Desi"
 
     def _parse_product_card(self, card, category_name: str = "apparel") -> Optional[RawProduct]:
         import re
         try:
-            url_el = card.find_element(By.CSS_SELECTOR, "a")
+            url_el = card.find_element(By.CSS_SELECTOR, "a.product-tile__anchor")
             product_url = url_el.get_attribute("href")
-            sku = product_url.split("/products/")[-1].split("?")[0] if "/products/" in product_url else product_url
+            
+            # Extract SKU from URL
+            sku = product_url.split("/")[-1].split(".html")[0] if product_url else ""
+            if not sku:
+                sku = product_url
 
-            name = safe_text(card, ".product-title, .card-information__text, h3")
+            name = safe_text(card, ".swimlaneproduct-name span")
             
             def clean_price(raw: str) -> Optional[float]:
                 if not raw: return None
@@ -757,36 +828,70 @@ class GlobalDesiScraper(BaseScraper):
                     return float(match.group().replace(",", ""))
                 return None
 
-            current_price = clean_price(safe_text(card, ".price-item--sale, .price--sale"))
-            original_price = clean_price(safe_text(card, ".price-item--regular, .price--regular"))
+            current_price = clean_price(safe_text(card, ".price .value"))
+            original_price = clean_price(safe_text(card, ".price .strike-through .value"))
             
-            if not current_price:
-                current_price = clean_price(safe_text(card, "span.price-item"))
+            if not original_price:
+                original_price = current_price
 
             discount_pct = None
             if original_price and current_price and original_price > current_price:
                 discount_pct = round((1 - current_price / original_price) * 100, 1)
 
+            img_url = ""
             try:
-                img_el = card.find_element(By.CSS_SELECTOR, "img")
-                img_url = img_el.get_attribute("src") or img_el.get_attribute("data-src") or ""
+                img_els = card.find_elements(By.CSS_SELECTOR, ".product-gallery__item:not(.slick-cloned) img.product-gallery__img")
+                for el in img_els:
+                    img_url = el.get_attribute("data-src") or el.get_attribute("data-srcset") or el.get_attribute("src") or ""
+                    if img_url and "Fabric%20Tag" not in img_url and "placeholder" not in img_url:
+                        break
+                
+                # Handle srcset format (takes the first image URL)
+                if "," in img_url or " " in img_url:
+                    first_part = img_url.split(",")[0].strip()
+                    img_url = first_part.split(" ")[0]
+                    
                 if img_url.startswith("//"): img_url = "https:" + img_url
-            except Exception:
-                img_url = ""
-
-            try:
-                badge = card.find_element(By.CSS_SELECTOR, ".badge, .label").text.lower()
-                is_bestseller = "bestseller" in badge or "trending" in badge
-            except Exception:
-                is_bestseller = False
+            except Exception as e:
+                logger.debug(f"[Global Desi] Image extraction failed: {e}")
 
             stock_available = "sold out" not in card.text.lower()
+
+            # ── Size Extraction via "Quick Add" ────────────────────────────
+            sizes = {}
+            try:
+                # Find the + icon or Add to Cart button
+                add_cart_btn = card.find_element(By.CSS_SELECTOR, ".product-addCart-icon")
+                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", add_cart_btn)
+                human_delay(0.5, 1)
+                add_cart_btn.click()
+                human_delay(1, 2) # Wait for flyout to appear
+                
+                # Find size elements in the flyout
+                size_els = self.driver.find_elements(By.CSS_SELECTOR, ".quick-add-tile-btn-resp.product-attribute__anchor.anchor--size")
+                for s_el in size_els:
+                    size_name = s_el.text.strip().upper()
+                    if not size_name:
+                        continue
+                    is_available = "selectable" in s_el.get_attribute("class")
+                    sizes[size_name] = {
+                        "quantity": 0,
+                        "disclosed": False,
+                        "is_available": is_available
+                    }
+            except Exception as e:
+                logger.debug(f"[Global Desi] Size extraction skipped/failed: {e}")
+
+            # Fallback if no sizes were extracted
+            if not sizes:
+                sizes = {"ALL": {"quantity": 0, "disclosed": False, "is_available": stock_available}}
 
             return RawProduct(
                 sku=sku, name=name, category=category_name,
                 current_price=current_price, original_price=original_price,
                 discount_pct=discount_pct, stock_available=stock_available,
-                is_bestseller=is_bestseller, image_url=img_url, product_url=product_url,
+                is_bestseller=False, image_url=img_url, product_url=product_url,
+                sizes=sizes
             )
         except Exception as e:
             logger.debug(f"[Global Desi] Card parse error: {e}")
@@ -796,31 +901,63 @@ class GlobalDesiScraper(BaseScraper):
         is_bs_url = "bestseller" in url.lower() or "bestseller" in cat_name.lower()
         is_new_url = "new" in url.lower()
         products = []
+        seen_skus = set()
         page = 1
+        
         while True:
-            cards = self.driver.find_elements(By.CSS_SELECTOR, "li.grid__item, .product-item, .product-card")
-            logger.info(f"[Global Desi] Page {page} — {len(cards)} cards found")
-            for card in cards:
-                parsed = self._parse_product_card(card, category_name=cat_name)
-                if parsed and parsed.name:
-                    if is_bs_url: parsed.is_bestseller = True
-                    if is_new_url: parsed.is_new_launch = True
-                    products.append(parsed)
-                    if self.callback:
-                        self.callback(parsed)
-
             try:
-                next_btn = self.driver.find_element(By.CSS_SELECTOR, "a[rel='next'], .pagination__next")
-                next_url = next_btn.get_attribute("href")
-                if not next_url:
+                # Construct URL with page number
+                page_url = f"{url}?page={page}" if "?" not in url else f"{url}&page={page}"
+                logger.info(f"[Global Desi] Loading {page_url}")
+                self.driver.get(page_url)
+                human_delay(3, 5) # Wait for page to load
+                
+                # Scroll down slowly to trigger lazy loading of images
+                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 2);")
+                time.sleep(1.5)
+                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(1.5)
+                
+                cards = self.driver.find_elements(By.CSS_SELECTOR, ".product-tile")
+                logger.info(f"[Global Desi] Page {page} — {len(cards)} cards found")
+                
+                # Scroll cards into view to guarantee lazy loading triggers
+                logger.info("[Global Desi] Scrolling cards into view to trigger lazy loading...")
+                for i in range(0, len(cards), 5): # Scroll every 5th card to save time
+                    try:
+                        self.driver.execute_script("arguments[0].scrollIntoView();", cards[i])
+                        time.sleep(0.3)
+                    except: pass
+                
+                if not cards:
+                    logger.info(f"[Global Desi] No products found on page {page}. Stopping.")
                     break
-                self._load_page(next_url)
+                    
+                new_on_page = 0
+                for card in cards:
+                    parsed = self._parse_product_card(card, category_name=cat_name)
+                    if parsed and parsed.sku and parsed.sku not in seen_skus:
+                        if is_bs_url: parsed.is_bestseller = True
+                        if is_new_url: parsed.is_new_launch = True
+                        
+                        seen_skus.add(parsed.sku)
+                        products.append(parsed)
+                        new_on_page += 1
+                        
+                        if self.callback:
+                            self.callback(parsed)
+                            
+                logger.info(f"[Global Desi] Processed {new_on_page} new products from {len(cards)} cards on page {page}.")
+                
                 page += 1
+                
             except Exception as e:
-                logger.info(f"[GlobalDesi] Pagination end: {e}")
+                logger.error(f"[Global Desi] Error on page {page}: {e}")
                 if "session id" in str(e).lower() or "connection" in str(e).lower():
-                    raise e
+                    logger.warning("[Global Desi] Critical session error. Stopping this category but returning products found so far.")
+                    break
                 break
+            
         return products
 
 

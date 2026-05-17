@@ -258,7 +258,6 @@ const StockDotPlot: React.FC<StockDotPlotProps> = ({
   const ROW_HEIGHT = 40;
   const CHART_HEIGHT = (Y_MAX - Y_MIN) * ROW_HEIGHT + TOP_PAD + BOTTOM_PAD;
 
-  // Always render SVG at exact measured pixel width — no viewBox scaling
   const availableWidth = containerWidth > 0 ? containerWidth : 400;
   const DATE_COL_WIDTH =
     dates.length > 0
@@ -275,7 +274,6 @@ const StockDotPlot: React.FC<StockDotPlotProps> = ({
     [DATE_COL_WIDTH, LABEL_WIDTH],
   );
 
-  // Mouse coords relative to container div (no viewBox transform needed)
   const handleMouseEnter = (
     e: React.MouseEvent<SVGCircleElement | SVGLineElement>,
     date: string,
@@ -293,15 +291,12 @@ const StockDotPlot: React.FC<StockDotPlotProps> = ({
 
   const handleMouseLeave = () => setTooltip(null);
 
-  // ── FIXED: getTooltipStyle now checks for both right AND bottom overflow ──
   const getTooltipStyle = (): React.CSSProperties => {
     if (!tooltip) return {};
     const cw = containerRef.current?.offsetWidth ?? 0;
     const ch = containerRef.current?.offsetHeight ?? 0;
 
     const wouldOverflowRight = tooltip.x + 14 + TOOLTIP_WIDTH > cw;
-
-    // Estimate tooltip height: date header (~36px) + per-size row (~26px) + padding (~20px)
     const estimatedTooltipHeight = 36 + sizes.length * 26 + 20;
     const wouldOverflowBottom = tooltip.y - 14 + estimatedTooltipHeight > ch;
 
@@ -325,7 +320,6 @@ const StockDotPlot: React.FC<StockDotPlotProps> = ({
     };
   };
 
-  // Defer render until real width is measured to avoid wrong layout on first paint
   if (containerWidth === 0) {
     return (
       <div ref={containerRef} style={{ width: "100%", height: CHART_HEIGHT }} />
@@ -337,14 +331,12 @@ const StockDotPlot: React.FC<StockDotPlotProps> = ({
       ref={containerRef}
       style={{ position: "relative", width: "100%", overflow: "hidden" }}
     >
-      {/* SVG at exact pixel width — no viewBox, no coordinate mismatch */}
       <svg
         ref={svgRef}
         width={availableWidth}
         height={CHART_HEIGHT}
         style={{ display: "block" }}
       >
-        {/* Horizontal grid lines + Y-axis labels */}
         {Y_LEVELS.map((lvl) => {
           const y = qtyToY(lvl);
           return (
@@ -373,7 +365,6 @@ const StockDotPlot: React.FC<StockDotPlotProps> = ({
           );
         })}
 
-        {/* Y-axis label */}
         <text
           x={9}
           y={TOP_PAD + ((Y_MAX - Y_MIN) * ROW_HEIGHT) / 2}
@@ -387,7 +378,6 @@ const StockDotPlot: React.FC<StockDotPlotProps> = ({
           QUANTITY
         </text>
 
-        {/* X-axis base line */}
         <line
           x1={LABEL_WIDTH}
           x2={availableWidth - RIGHT_PAD}
@@ -397,7 +387,6 @@ const StockDotPlot: React.FC<StockDotPlotProps> = ({
           strokeWidth={1}
         />
 
-        {/* Date labels */}
         {dates.map((date, di) => (
           <text
             key={date}
@@ -413,20 +402,15 @@ const StockDotPlot: React.FC<StockDotPlotProps> = ({
           </text>
         ))}
 
-        {/* Column hover bands */}
-        {dates.map((date, di) => (
-          <rect
-            key={di}
-            x={LABEL_WIDTH + di * DATE_COL_WIDTH + 4}
-            y={TOP_PAD}
-            width={DATE_COL_WIDTH - 8}
-            height={qtyToY(Y_MIN) - TOP_PAD}
-            fill="#f9fafb"
-            rx={4}
-          />
-        ))}
+        <rect
+          x={LABEL_WIDTH + 4}
+          y={TOP_PAD}
+          width={availableWidth - LABEL_WIDTH - RIGHT_PAD - 8}
+          height={qtyToY(Y_MIN) - TOP_PAD}
+          fill="#f9fafb"
+          rx={6}
+        />
 
-        {/* Lines connecting dots per size */}
         {sizes.map((size, si) => {
           const color = colors[si % colors.length];
           const points: { x: number; y: number }[] = [];
@@ -462,7 +446,6 @@ const StockDotPlot: React.FC<StockDotPlotProps> = ({
           );
         })}
 
-        {/* Dots */}
         {sizes.map((size, si) => {
           const color = colors[si % colors.length];
 
@@ -541,7 +524,6 @@ const StockDotPlot: React.FC<StockDotPlotProps> = ({
         })}
       </svg>
 
-      {/* Tooltip */}
       {tooltip &&
         (() => {
           const snapshot = grouped[tooltip.date] ?? {};
@@ -701,17 +683,33 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
   });
 
   const { chartData, tableRows } = useMemo(() => {
-    const desc = [...history].sort(
+    const chron = [...history].sort(
       (a, b) =>
-        new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime(),
+        new Date(a.scraped_at).getTime() - new Date(b.scraped_at).getTime(),
     );
+
+    // Filter out records where price and stock didn't change from the previous snapshot
+    const uniqueChron = [];
+    let lastPrice = null;
+    let lastStock = null;
+
+    for (const h of chron) {
+      if (h.price !== lastPrice || h.stock_available !== lastStock) {
+        uniqueChron.push(h);
+        lastPrice = h.price;
+        lastStock = h.stock_available;
+      }
+    }
+
+    const uniqueDesc = [...uniqueChron].reverse();
+
     return {
-      chartData: [...desc].reverse().map((h) => ({
+      chartData: uniqueChron.map((h) => ({
         date: format(parseISO(h.scraped_at), "MMM dd"),
         price: h.price,
       })),
-      tableRows: desc.map((row, i) => {
-        const prev = desc[i + 1];
+      tableRows: uniqueDesc.map((row, i) => {
+        const prev = uniqueDesc[i + 1];
         const change = prev ? row.price - prev.price : 0;
         const changePct = prev?.price > 0 ? (change / prev.price) * 100 : 0;
         return { ...row, change, changePct };
@@ -735,14 +733,15 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
     }, {});
 
     const dates = Object.keys(rawGrouped);
-    const sizes = Array.from(new Set(sorted.map((s: any) => s.size))).sort() as string[];
+    const sizes = Array.from(
+      new Set(sorted.map((s: any) => s.size)),
+    ).sort() as string[];
 
     const grouped: any = {};
     const lastKnownState: Record<string, any> = {};
 
     dates.forEach((date) => {
       grouped[date] = {};
-      // Update our "current state" with changes that happened on this day
       rawGrouped[date].forEach((r: any) => {
         lastKnownState[r.size] = {
           quantity: r.quantity,
@@ -751,7 +750,6 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
         };
       });
 
-      // Fill this date's bucket with the latest known state for EVERY size
       sizes.forEach((size) => {
         if (lastKnownState[size]) {
           grouped[date][size] = { ...lastKnownState[size] };
@@ -798,7 +796,6 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
   const latestState = useMemo(() => {
     if (!analyticsData) return {};
     const state: Record<string, any> = {};
-    // Iterate through dates in chronological order to build the latest state for each size
     analyticsData.dates.forEach((date) => {
       const snap = analyticsData.grouped[date];
       Object.keys(snap).forEach((size) => {
@@ -818,7 +815,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
       (sum, s) =>
         sum +
         (latestState[s]?.is_quantity_disclose
-          ? latestState[s]?.quantity ?? 0
+          ? (latestState[s]?.quantity ?? 0)
           : 0),
       0,
     );
@@ -1014,12 +1011,18 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                       },
                       {
                         label: "Total change",
-                        value: history.length > 1 
-                          ? `${history[0].price - history[history.length - 1].price < 0 ? "↓" : "↑"} ₹${Math.abs(history[0].price - history[history.length - 1].price).toLocaleString()} (${((Math.abs(history[0].price - history[history.length - 1].price) / history[history.length - 1].price) * 100).toFixed(1)}%)`
-                          : "—",
-                        color: history.length > 1 
-                          ? (history[0].price - history[history.length - 1].price < 0 ? "text-green-600" : "text-red-500") 
-                          : "text-gray-400",
+                        value:
+                          history.length > 1
+                            ? `${history[0].price - history[history.length - 1].price < 0 ? "↓" : "↑"} ₹${Math.abs(history[0].price - history[history.length - 1].price).toLocaleString()} (${((Math.abs(history[0].price - history[history.length - 1].price) / history[history.length - 1].price) * 100).toFixed(1)}%)`
+                            : "—",
+                        color:
+                          history.length > 1
+                            ? history[0].price -
+                                history[history.length - 1].price <
+                              0
+                              ? "text-green-600"
+                              : "text-red-500"
+                            : "text-gray-400",
                       },
                     ].map((s) => (
                       <div key={s.label} className="bg-gray-50 rounded-lg p-3">
@@ -1176,7 +1179,6 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                   <p className="text-xs text-gray-400 mt-1">Check back soon</p>
                 </div>
               ) : (
-                // ── SINGLE CARD containing all three sections ──────────────
                 <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
                   {/* ── Section 1: Current Stock ── */}
                   <div className="border-b border-gray-100">
@@ -1285,7 +1287,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                     </div>
                   </div>
 
-                  {/* ── Section 2: Stock Trend (full width) ── */}
+                  {/* ── Section 2: Stock Trend ── */}
                   <div className="border-b border-gray-100 w-full flex flex-col">
                     <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                       <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
@@ -1306,7 +1308,6 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                       />
                     </div>
 
-                    {/* Size legend */}
                     <div className="flex flex-wrap gap-3 px-4 pb-3 pt-1">
                       {analyticsData.sizes.map((size, idx) => (
                         <div key={size} className="flex items-center gap-1.5">
@@ -1324,7 +1325,6 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                       ))}
                     </div>
 
-                    {/* Symbol legend */}
                     <div className="px-4 pb-4 flex gap-4">
                       <div className="flex items-center gap-1.5">
                         <svg width={14} height={14}>
@@ -1361,7 +1361,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                     </div>
                   </div>
 
-                  {/* ── Section 3: Inventory History Table (full width) ── */}
+                  {/* ── Section 3: Inventory History Table ── */}
                   <div className="w-full flex flex-col">
                     <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                       <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
@@ -1372,16 +1372,21 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                       </span>
                     </div>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
+                      <table className="w-full text-xs border-collapse">
                         <thead>
-                          <tr className="bg-gray-50 border-b border-gray-100">
-                            <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider sticky left-0 bg-gray-50">
+                          <tr className="bg-[#fceae7]">
+                            {/* ── CHANGE: added border-r to Size th ── */}
+                            <th className="px-4 py-3 text-left text-[10px] font-bold text-[#7f1d1d] uppercase tracking-wider sticky left-0 bg-[#fceae7] border-b border-r border-gray-200">
                               Size
                             </th>
-                            {analyticsData.dates.map((date) => (
+                            {analyticsData.dates.map((date, di) => (
                               <th
                                 key={date}
-                                className="px-3 py-3 text-center text-[10px] font-bold text-gray-400 uppercase tracking-wider"
+                                className={`px-3 py-3 text-center text-[10px] font-bold text-[#7f1d1d] uppercase tracking-wider border-b border-gray-200 ${
+                                  di < analyticsData.dates.length - 1
+                                    ? "border-r border-gray-100"
+                                    : ""
+                                }`}
                               >
                                 {date}
                               </th>
@@ -1389,15 +1394,20 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                           </tr>
                         </thead>
                         <tbody>
-                          {analyticsData.sizes.map((size) => (
+                          {analyticsData.sizes.map((size, rowIdx) => (
                             <tr
                               key={size}
-                              className="border-t border-gray-50 hover:bg-gray-50/40 transition-colors"
+                              className={`hover:bg-gray-50/40 transition-colors ${
+                                rowIdx < analyticsData.sizes.length - 1
+                                  ? "border-b border-gray-100"
+                                  : ""
+                              }`}
                             >
-                              <td className="px-4 py-3 font-bold text-gray-800 sticky left-0 bg-white">
+                              {/* ── CHANGE: Size cell with right border ── */}
+                              <td className="px-4 py-3 font-bold text-gray-800 sticky left-0 bg-white border-r border-gray-200">
                                 {size}
                               </td>
-                              {analyticsData.dates.map((date) => {
+                              {analyticsData.dates.map((date, di) => {
                                 const info =
                                   analyticsData.grouped[date]?.[size];
                                 const qty = info?.quantity ?? 0;
@@ -1413,12 +1423,18 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                                 return (
                                   <td
                                     key={date}
-                                    className="px-3 py-3 text-center"
+                                    className={`px-3 py-3 text-center ${
+                                      di < analyticsData.dates.length - 1
+                                        ? "border-r border-gray-100"
+                                        : ""
+                                    }`}
                                   >
                                     <span
                                       className={`inline-flex items-center justify-center w-7 h-7 rounded-lg text-[10px] font-bold ${
                                         inStock
-                                          ? "bg-green-50 text-green-700"
+                                          ? isDisclosed
+                                            ? "bg-green-50 text-green-700"
+                                            : "bg-amber-50 text-amber-700"
                                           : "bg-gray-50 text-gray-300"
                                       }`}
                                     >
@@ -1434,7 +1450,6 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
                     </div>
                   </div>
                 </div>
-                // ── END SINGLE CARD ─────────────────────────────────────────
               )}
             </motion.div>
           )}

@@ -7,7 +7,7 @@ import {
   ModuleRegistry,
   AllCommunityModule
 } from 'ag-grid-community';
-import { ArrowUpRight, Plus, Globe, X, Save, Loader2, Trash2, AlertCircle, Search } from 'lucide-react';
+import { ArrowUpRight, Plus, Globe, X, Save, Loader2, Trash2, AlertCircle, Search, Edit, ChevronLeft, ChevronRight, Radio } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { competitorService } from '../services/api';
 import { Competitor } from '../types';
@@ -27,11 +27,16 @@ interface CategoryInput {
   url: string;
 }
 
+const PAGE_SIZE = 20;
+
 const CompetitorView: React.FC = () => {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [editingCompetitor, setEditingCompetitor] = useState<Competitor | null>(null);
+  const [page, setPage] = useState(1);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -59,6 +64,12 @@ const CompetitorView: React.FC = () => {
     );
   }, [competitors, searchQuery]);
 
+  const totalPages = Math.ceil(filteredCompetitors.length / PAGE_SIZE);
+
+  const paginatedCompetitors = useMemo(() => {
+    return filteredCompetitors.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  }, [filteredCompetitors, page]);
+
   const createMutation = useMutation({
     mutationFn: (data: any) => competitorService.createCompetitor(data),
     onSuccess: () => {
@@ -77,10 +88,37 @@ const CompetitorView: React.FC = () => {
     }
   });
 
+  const updateMutation = useMutation({
+    mutationFn: (data: any) => competitorService.updateCompetitor(editingCompetitor!.id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['competitors'] });
+      setIsModalOpen(false);
+      resetForm();
+      toast.success('Competitor updated successfully!');
+    },
+    onError: (err: any) => {
+      const msg = err.response?.data?.detail;
+      toast.error(msg || 'Failed to update competitor');
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => competitorService.deleteCompetitor(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['competitors'] });
+      toast.success('Competitor deleted successfully!');
+    },
+    onError: (err: any) => {
+      const msg = err.response?.data?.detail;
+      toast.error(msg || 'Failed to delete competitor');
+    }
+  });
+
   const resetForm = () => {
     setFormData({ name: '', code: '', base_url: '', scraper_name: '' });
     setCategories([{ name: 'Bestsellers', url: '' }, { name: 'New Arrivals', url: '' }]);
     setErrors({});
+    setEditingCompetitor(null);
   };
 
   const validate = () => {
@@ -122,11 +160,33 @@ const CompetitorView: React.FC = () => {
     }
 
     const validCategories = categories.filter(c => c.name.trim() && c.url.trim());
-    createMutation.mutate({
+    const payload = {
       ...formData,
       scraper_name: formData.scraper_name || `${formData.name.toLowerCase().replace(/ /g, '_')}_scraper`,
       categories: validCategories
+    };
+
+    if (editingCompetitor) {
+      updateMutation.mutate(payload);
+    } else {
+      createMutation.mutate(payload);
+    }
+  };
+
+  const handleEdit = (competitor: Competitor) => {
+    setEditingCompetitor(competitor);
+    setFormData({
+      name: competitor.name,
+      code: competitor.code,
+      base_url: competitor.base_url,
+      scraper_name: competitor.scraper_name || ''
     });
+    setCategories(competitor.categories.map(c => ({ name: c.name, url: c.url || '' })));
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = (id: number) => {
+    setDeleteConfirmId(id);
   };
 
   const addCategory = () => {
@@ -167,6 +227,7 @@ const CompetitorView: React.FC = () => {
       field: 'base_url', 
       headerName: 'Base Website', 
       flex: 1,
+      minWidth: 200,
       cellRenderer: (params: any) => (
         <div className="flex items-center h-full">
           <a 
@@ -183,8 +244,8 @@ const CompetitorView: React.FC = () => {
     },
     { 
       field: 'code', 
-      headerName: 'System Code', 
-      width: 150,
+      headerName: 'Competitor Code', 
+      width: 220,
       cellRenderer: (params: any) => (
         <div className="flex items-center h-full font-mono text-xs text-slate-500">
           {params.value}
@@ -211,6 +272,28 @@ const CompetitorView: React.FC = () => {
           ))}
         </div>
       )
+    },
+    {
+      headerName: 'Actions',
+      width: 150,
+      cellRenderer: (params: any) => (
+        <div className="flex items-center gap-2 h-full">
+          <button
+            onClick={() => handleEdit(params.data)}
+            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            title="Edit"
+          >
+            <Edit size={16} />
+          </button>
+          <button
+            onClick={() => handleDelete(params.data.id)}
+            className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+            title="Delete"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
+      )
     }
   ];
 
@@ -218,8 +301,7 @@ const CompetitorView: React.FC = () => {
     rowHeight: 65,
     headerHeight: 50,
     animateRows: true,
-    pagination: true,
-    paginationPageSize: 20,
+    pagination: false,
     suppressCellFocus: true,
     overlayLoadingTemplate: '<span class="ag-overlay-loading-center">Loading competitors...</span>'
   };
@@ -231,16 +313,65 @@ const CompetitorView: React.FC = () => {
       variants={fadeInUp}
       className="flex flex-col h-full"
     >
+      {/* AG Grid header color override */}
+      <style>{`
+        .comp-grid .ag-root-wrapper {
+          border: none !important;
+          border-radius: 24px !important;
+          height: 100% !important;
+        }
+        .comp-grid .ag-header,
+        .comp-grid .ag-header-row,
+        .comp-grid .ag-header-cell {
+          background-color: #fceae7 !important;
+        }
+        .comp-grid .ag-header-cell-label {
+          color: #7f1d1d !important;
+          font-weight: 700 !important;
+          text-transform: uppercase !important;
+          letter-spacing: 0.05em !important;
+          font-size: 12px !important;
+        }
+        .comp-grid .ag-cell {
+          border-right: 1px solid #000000 !important;
+          border-bottom: 1px solid #000000 !important;
+          display: flex !important;
+          align-items: center !important;
+          color: #1e293b !important;
+          font-size: 12px !important;
+        }
+        .comp-grid .ag-header-cell {
+          border-right: 1px solid #000000 !important;
+        }
+        .comp-grid .ag-row {
+          border-bottom: none !important;
+        }
+        .comp-grid .ag-row-hover {
+          background-color: rgba(192, 57, 43, 0.04) !important;
+        }
+        .comp-grid .ag-header-cell-resize::after {
+          background-color: #f9c4bc !important;
+        }
+        .comp-grid .ag-sort-indicator-icon {
+          color: #c0392b !important;
+        }
+      `}</style>
+
       <div className="max-w-[1600px] mx-auto w-full flex flex-col h-full">
         
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3 tracking-tighter">
-              Competitor Registry
-              <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-            </h1>
-            <p className="text-slate-500 font-medium text-sm mt-1">Manage and monitor brand scrape targets</p>
+          <div className="flex items-center gap-4">
+            <div className="h-12 w-12 rounded-2xl bg-[#fceae7] flex items-center justify-center shadow-sm">
+              <Radio size={24} className="text-[#7f1d1d]" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3 tracking-tighter">
+                Competitor Registry
+                <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+              </h1>
+              <p className="text-slate-500 font-medium text-sm mt-1">Manage and monitor brand scrape targets</p>
+            </div>
           </div>
 
           <div className="flex items-center gap-3">
@@ -296,13 +427,42 @@ const CompetitorView: React.FC = () => {
               <GooeyLoader size="md" />
             </div>
           )}
-          <div className="ag-theme-quartz h-full w-full">
+          <div className="ag-theme-quartz h-full w-full comp-grid">
             <AgGridReact
               theme="legacy"
-              rowData={filteredCompetitors}
+              rowData={paginatedCompetitors}
               columnDefs={columnDefs}
               gridOptions={gridOptions}
             />
+          </div>
+        </div>
+
+        {/* Pagination */}
+        <div className="flex items-center justify-between px-8 py-4 bg-white border border-slate-100 rounded-2xl shadow-sm mt-4">
+          <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
+            Total Competitors:{" "}
+            <span className="font-black" style={{ color: "#c0392b" }}>
+              {filteredCompetitors.length}
+            </span>
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span className="text-xs font-bold text-slate-700 min-w-[70px] text-center">
+              Page {page} of {Math.max(1, totalPages)}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              <ChevronRight size={16} />
+            </button>
           </div>
         </div>
       </div>
@@ -317,7 +477,7 @@ const CompetitorView: React.FC = () => {
           <div className="bg-white rounded-3xl w-full max-w-2xl relative shadow-2xl animate-in zoom-in-95 duration-300 overflow-hidden">
             <div className="flex flex-col max-h-[90vh]">
               <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <h2 className="text-xl font-black text-slate-800 tracking-tighter">Register New Competitor</h2>
+                <h2 className="text-xl font-black text-slate-800 tracking-tighter">{editingCompetitor ? 'Update Competitor' : 'Register New Competitor'}</h2>
                 <button 
                   onClick={() => { setIsModalOpen(false); resetForm(); }}
                   className="p-2 hover:bg-slate-200 rounded-lg transition-colors"
@@ -449,13 +609,13 @@ const CompetitorView: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleSubmit}
-                  disabled={createMutation.isPending}
+                  disabled={createMutation.isPending || updateMutation.isPending}
                   className="flex-1 px-6 py-3 text-white rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                   style={{ backgroundColor: '#c0392b', boxShadow: '0 4px 14px rgba(192,57,43,0.35)' }}
-                  onMouseEnter={e => { if (!createMutation.isPending) e.currentTarget.style.backgroundColor = '#a93226'; }}
-                  onMouseLeave={e => { if (!createMutation.isPending) e.currentTarget.style.backgroundColor = '#c0392b'; }}
+                  onMouseEnter={e => { if (!createMutation.isPending && !updateMutation.isPending) e.currentTarget.style.backgroundColor = '#a93226'; }}
+                  onMouseLeave={e => { if (!createMutation.isPending && !updateMutation.isPending) e.currentTarget.style.backgroundColor = '#c0392b'; }}
                 >
-                  {createMutation.isPending ? (
+                  {(createMutation.isPending || updateMutation.isPending) ? (
                     <>
                       <Loader2 size={18} className="animate-spin" />
                       Processing...
@@ -463,11 +623,65 @@ const CompetitorView: React.FC = () => {
                   ) : (
                     <>
                       <Save size={18} />
-                      Register Brand
+                      {editingCompetitor ? 'Update Brand' : 'Register Brand'}
                     </>
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmId !== null && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300"
+            onClick={() => setDeleteConfirmId(null)}
+          />
+          <div className="bg-white rounded-3xl w-full max-w-md relative shadow-2xl animate-in zoom-in-95 duration-300 overflow-hidden">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <h2 className="text-xl font-black text-slate-800 tracking-tighter">Delete Competitor</h2>
+              <button 
+                onClick={() => setDeleteConfirmId(null)}
+                className="p-2 hover:bg-slate-200 rounded-lg transition-colors"
+              >
+                <X size={20} className="text-slate-500" />
+              </button>
+            </div>
+            <div className="p-8 space-y-4">
+              <div className="flex items-center gap-3 text-amber-600">
+                <AlertCircle size={24} />
+                <p className="text-sm font-bold">This action cannot be undone.</p>
+              </div>
+              <p className="text-slate-600 font-medium">
+                Are you sure you want to delete this competitor? All associated data will be removed.
+              </p>
+            </div>
+            <div className="p-6 bg-slate-50 flex gap-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmId(null)}
+                className="flex-1 px-4 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (deleteConfirmId !== null) {
+                    deleteMutation.mutate(deleteConfirmId);
+                    setDeleteConfirmId(null);
+                  }
+                }}
+                className="flex-1 px-4 py-2.5 text-white rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
+                style={{ backgroundColor: '#c0392b' }}
+                onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#a93226')}
+                onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#c0392b')}
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>

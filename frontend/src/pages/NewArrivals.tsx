@@ -64,28 +64,35 @@ const NewArrivals: React.FC = () => {
     },
 
     {
-      headerName: "Product",
-      field: "name",
-      flex: 2,
-      minWidth: 250,
+      headerName: "Image",
+      field: "image_url",
+      width: 100,
       cellRenderer: (params: any) => (
-        <button
-          onClick={() => setSelectedProduct(params.data)}
-          className="flex items-center gap-4 h-full text-left w-full hover:bg-slate-50 transition-colors cursor-pointer"
-        >
+        <div className="flex items-center justify-center h-full">
           <img
-            src={params.data.image_url}
+            src={params.value}
             alt=""
             className="h-12 w-9 rounded-lg object-cover shadow-sm border border-slate-100"
           />
-          <div className="flex flex-col justify-center overflow-hidden">
-            <span className="font-bold text-slate-800 leading-tight truncate hover:text-blue-600 transition-colors">
-              {params.value}
-            </span>
-            <span className="text-[10px] text-slate-400 font-mono mt-1">
-              {params.data.sku}
-            </span>
-          </div>
+        </div>
+      ),
+    },
+    {
+      headerName: "Product Name",
+      field: "name",
+      flex: 2,
+      minWidth: 200,
+      cellRenderer: (params: any) => (
+        <button
+          onClick={() => setSelectedProduct(params.data)}
+          className="flex flex-col justify-center h-full text-left w-full hover:bg-slate-50 transition-colors cursor-pointer"
+        >
+          <span className="font-bold text-slate-800 leading-tight truncate hover:text-blue-600 transition-colors">
+            {params.value}
+          </span>
+          <span className="text-[10px] text-slate-400 font-mono mt-1">
+            {params.data.sku}
+          </span>
         </button>
       ),
     },
@@ -134,10 +141,22 @@ const NewArrivals: React.FC = () => {
       field: "current_price",
       width: 130,
       valueFormatter: (params) =>
-        params.value ? `₹${params.value.toLocaleString()}` : "—",
+        params.value ? `Rs.${params.value.toLocaleString()}` : "—",
       cellClass: "font-black text-slate-900",
     },
-     {
+    { 
+      headerName: 'IsActive', 
+      field: 'is_active' as any, 
+      width: 100,
+      cellRenderer: (params: any) => (
+        <div className="flex items-center h-full justify-center">
+          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${params.value ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+            {params.value ? 'YES' : 'NO'}
+          </span>
+        </div>
+      )
+    },
+    {
       headerName: "Detected On",
       field: "first_seen_at",
       width: 130,
@@ -145,7 +164,7 @@ const NewArrivals: React.FC = () => {
         params.value ? new Date(params.value).toLocaleDateString() : "—",
       cellClass: "text-slate-400 font-medium",
     },
-   
+
     {
       headerName: "View",
       field: "product_url",
@@ -158,7 +177,6 @@ const NewArrivals: React.FC = () => {
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-slate-600 text-[10px] font-black uppercase tracking-widest rounded-lg border border-slate-200 hover:bg-white hover:text-blue-600 hover:border-blue-200 transition-all group"
           >
-            
             <svg
               className="w-3 h-3 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
               fill="none"
@@ -176,7 +194,6 @@ const NewArrivals: React.FC = () => {
         </div>
       ),
     },
-   
   ];
 
   const gridOptions: GridOptions = {
@@ -233,7 +250,7 @@ const NewArrivals: React.FC = () => {
                 </div>
                 <div>
                   <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-                    New Arrivals Monitor
+                    New Arrivals 
                   </h1>
                   <p className="text-xs font-medium text-slate-400 mt-1 uppercase tracking-widest">
                     Tracking fresh catalog entries across competitors

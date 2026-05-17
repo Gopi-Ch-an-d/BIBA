@@ -58,6 +58,8 @@ export const competitorService = {
   triggerScrape: (name?: string) => api.post('/scrape/trigger', null, { params: { competitor_name: name } }).then(res => res.data),
   stopScrape: () => api.post('/scrape/stop').then(res => res.data),
   createCompetitor: (data: any) => api.post<Competitor>('/competitors', data).then(res => res.data),
+  updateCompetitor: (id: number, data: any) => api.put<Competitor>(`/competitors/${id}`, data).then(res => res.data),
+  deleteCompetitor: (id: number) => api.delete(`/competitors/${id}`).then(res => res.data),
 };
 
 export const productService = {
@@ -88,12 +90,32 @@ export const analyticsService = {
   getNewArrivalsTrend: (params: {
     competitor_id?: number;
     days?: number;
+    is_new_launch?: boolean;
   }) => api.get<NewArrivalTrendPoint[]>('/analytics/new-arrivals-trend', { params }).then(res => res.data),
 };
 
 export const logService = {
   getScrapeLogs: (competitor_id?: number, limit = 20) =>
     api.get<ScrapeLog[]>('/logs/scrape', { params: { competitor_id, limit } }).then(res => res.data),
+};
+
+export const userService = {
+  getUsers: () => api.get<any[]>('/users').then(res => res.data),
+  createUser: (data: any) => api.post<any>('/users', data).then(res => res.data),
+  updateUser: (id: number, data: any) => api.put<any>(`/users/${id}`, data).then(res => res.data),
+  deleteUser: (id: number) => api.delete(`/users/${id}`).then(res => res.data),
+};
+
+export const roleService = {
+  getRoles: () => api.get<any[]>('/roles').then(res => res.data),
+  createRole: (data: any) => api.post<any>('/roles', data).then(res => res.data),
+};
+
+export const employeeService = {
+  getEmployees: () => api.get<any[]>('/employees').then(res => res.data),
+  createEmployee: (data: any) => api.post<any>('/employees', data).then(res => res.data),
+  updateEmployee: (id: number, data: any) => api.put<any>(`/employees/${id}`, data).then(res => res.data),
+  deleteEmployee: (id: number) => api.delete(`/employees/${id}`).then(res => res.data),
 };
 
 export default api;

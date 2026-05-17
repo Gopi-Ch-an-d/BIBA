@@ -19,10 +19,11 @@ logger = logging.getLogger(__name__)
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python manual_scrape.py <CompetitorName> or 'all'")
+        print("Usage: python manual_scrape.py <CompetitorName> [CategoryName] or 'all'")
         sys.exit(1)
     
     target = sys.argv[1]
+    category_name = sys.argv[2] if len(sys.argv) > 2 else None
     session = SessionLocalSync()
     
     try:
@@ -30,11 +31,17 @@ def main():
             from db.models import Competitor
             competitors = session.query(Competitor).filter_by(is_active=True).all()
             for comp in competitors:
-                logger.info(f"Starting manual scrape for: {comp.name}")
-                run_scrape_for_competitor(comp.name, session)
+                if category_name:
+                    logger.info(f"Starting manual scrape for: {comp.name} (Category: {category_name})")
+                else:
+                    logger.info(f"Starting manual scrape for: {comp.name}")
+                run_scrape_for_competitor(comp.name, session, category_name=category_name)
         else:
-            logger.info(f"Starting manual scrape for: {target}")
-            run_scrape_for_competitor(target, session)
+            if category_name:
+                logger.info(f"Starting manual scrape for: {target} (Category: {category_name})")
+            else:
+                logger.info(f"Starting manual scrape for: {target}")
+            run_scrape_for_competitor(target, session, category_name=category_name)
     except Exception as e:
         logger.error(f"Manual scrape failed: {e}")
     finally:
