@@ -86,7 +86,7 @@ class Picklist(Base):
 
 class Competitor(Base):
     __tablename__ = 'competitors'
-    __table_args__ = {'schema': 'intelligence'}
+    __table_args__ = {'schema': 'master'}
     
     record_id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False)
@@ -104,11 +104,11 @@ class Category(Base):
     __tablename__ = 'categories'
     __table_args__ = (
         UniqueConstraint('competitor_id', 'slug'),
-        {'schema': 'intelligence'}
+        {'schema': 'master'}
     )
     
     record_id = Column(Integer, primary_key=True, autoincrement=True)
-    competitor_id = Column(Integer, ForeignKey('intelligence.competitors.record_id', ondelete='CASCADE'), nullable=False)
+    competitor_id = Column(Integer, ForeignKey('master.competitors.record_id', ondelete='CASCADE'), nullable=False)
     name = Column(String(255), nullable=False)
     slug = Column(String(255))
     url = Column(Text)
@@ -127,8 +127,8 @@ class BestsellerProduct(Base):
     )
     
     record_id = Column(Integer, primary_key=True, autoincrement=True)
-    competitor_id = Column(Integer, ForeignKey('intelligence.competitors.record_id', ondelete='CASCADE'), nullable=False)
-    category_id = Column(Integer, ForeignKey('intelligence.categories.record_id', ondelete='SET NULL'))
+    competitor_id = Column(Integer, ForeignKey('master.competitors.record_id', ondelete='CASCADE'), nullable=False)
+    category_id = Column(Integer, ForeignKey('master.categories.record_id', ondelete='SET NULL'))
     
     sku = Column(String(200), nullable=False)
     name = Column(String(500), nullable=False)
@@ -160,8 +160,8 @@ class NewArrivalProduct(Base):
     )
     
     record_id = Column(Integer, primary_key=True, autoincrement=True)
-    competitor_id = Column(Integer, ForeignKey('intelligence.competitors.record_id', ondelete='CASCADE'), nullable=False)
-    category_id = Column(Integer, ForeignKey('intelligence.categories.record_id', ondelete='SET NULL'))
+    competitor_id = Column(Integer, ForeignKey('master.competitors.record_id', ondelete='CASCADE'), nullable=False)
+    category_id = Column(Integer, ForeignKey('master.categories.record_id', ondelete='SET NULL'))
     
     sku = Column(String(200), nullable=False)
     name = Column(String(500), nullable=False)
@@ -211,7 +211,7 @@ class PriceHistory(Base):
     record_id = Column(Integer, primary_key=True, autoincrement=True)
     source = Column(String(50), nullable=False) # 'bestseller' or 'new_arrival'
     product_id = Column(Integer, nullable=False)
-    competitor_id = Column(Integer, ForeignKey('intelligence.competitors.record_id', ondelete='CASCADE'))
+    competitor_id = Column(Integer, ForeignKey('master.competitors.record_id', ondelete='CASCADE'))
     sku = Column(String(200))
     price = Column(Float)
     original_price = Column(Float)
@@ -225,7 +225,7 @@ class ScrapeLog(Base):
     __table_args__ = {'schema': 'intelligence'}
     
     record_id = Column(Integer, primary_key=True, autoincrement=True)
-    competitor_id = Column(Integer, ForeignKey('intelligence.competitors.record_id', ondelete='CASCADE'))
+    competitor_id = Column(Integer, ForeignKey('master.competitors.record_id', ondelete='CASCADE'))
     scrape_type = Column(String(50), default='all')
     total_products = Column(Integer)
     new_products = Column(Integer)
@@ -242,7 +242,7 @@ class RequestLog(Base):
     __table_args__ = {'schema': 'intelligence'}
     
     record_id = Column(Integer, primary_key=True, autoincrement=True)
-    competitor_id = Column(Integer, ForeignKey('intelligence.competitors.record_id', ondelete='CASCADE'))
+    competitor_id = Column(Integer, ForeignKey('master.competitors.record_id', ondelete='CASCADE'))
     url = Column(Text)
     ip_address = Column(String(50))
     proxy_provider = Column(String(100))

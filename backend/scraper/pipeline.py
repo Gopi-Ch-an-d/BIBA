@@ -178,8 +178,7 @@ def _record_unified_history(session: Session, product, competitor_id: int, sourc
 
     # Skip duplicate snapshots
     if last_record:
-        if (last_record.price == product.current_price and
-                last_record.stock_available == product.stock_available):
+        if last_record.price == product.current_price:
             return
 
     snapshot = PriceHistory(

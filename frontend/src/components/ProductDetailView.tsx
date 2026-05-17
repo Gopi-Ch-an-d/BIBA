@@ -688,16 +688,14 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({
         new Date(a.scraped_at).getTime() - new Date(b.scraped_at).getTime(),
     );
 
-    // Filter out records where price and stock didn't change from the previous snapshot
+    // Filter out records where price didn't change from the previous snapshot
     const uniqueChron = [];
     let lastPrice = null;
-    let lastStock = null;
 
     for (const h of chron) {
-      if (h.price !== lastPrice || h.stock_available !== lastStock) {
+      if (h.price !== lastPrice) {
         uniqueChron.push(h);
         lastPrice = h.price;
-        lastStock = h.stock_available;
       }
     }
 
